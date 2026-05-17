@@ -1,0 +1,31 @@
+# Streamlit 비밀키 및 세션 캐시
+.streamlit/secrets.toml
+.streamlit/session_cache.json
+
+# 기존 로컬 DB
+diary.db
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 환경변수
+.env
+secrets.env
+
+# 구버전 및 개발용 파일
+app.py.old
+CONTEXT_COMPRESSION_SPEC.md
+주식다이어리실행.bat
+
+# 개인 이미지 파일
+*.jpg
+*.jpeg
+*.png
+
+# OS
+.DS_Store
+Thumbs.db

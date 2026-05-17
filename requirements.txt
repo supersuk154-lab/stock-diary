@@ -1,0 +1,6 @@
+streamlit>=1.36.0
+google-generativeai>=0.7.0
+supabase>=2.5.0
+pillow>=10.0.0
+plotly>=5.18.0
+yfinance>=0.2.40
