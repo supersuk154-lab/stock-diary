@@ -397,6 +397,85 @@ def show_login():
             except Exception as e:
                 st.error(f"⚠️ 회원가입 실패: {e}")
 
+    st.markdown("---")
+
+    # 비밀번호 찾기 (3단계: 이메일 → 인증코드 → 새 비밀번호)
+    with st.expander("🔑 비밀번호를 잊으셨나요?"):
+        step = st.session_state.get("pw_reset_step", "email")
+
+        if step == "email":
+            with st.form("reset_email_form"):
+                reset_email = st.text_input("가입한 이메일", placeholder="you@example.com")
+                send_btn = st.form_submit_button("📨 인증코드 받기", type="primary", use_container_width=True)
+            if send_btn:
+                if not reset_email:
+                    st.warning("이메일을 입력해주세요.")
+                else:
+                    try:
+                        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+                        client.auth.sign_in_with_otp({
+                            "email": reset_email,
+                            "options": {"should_create_user": False},
+                        })
+                        st.session_state["pw_reset_email"] = reset_email
+                        st.session_state["pw_reset_step"] = "otp"
+                        st.success(f"📧 {reset_email}로 인증코드를 보냈습니다.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"발송 실패: {e}")
+
+        elif step == "otp":
+            st.info(f"📧 **{st.session_state.get('pw_reset_email')}** 으로 인증코드를 보냈습니다.")
+            with st.form("reset_otp_form"):
+                otp_code = st.text_input("이메일로 받은 인증코드", max_chars=8, placeholder="6~8자리")
+                otp_btn = st.form_submit_button("✅ 확인", type="primary", use_container_width=True)
+            if otp_btn:
+                if not otp_code:
+                    st.warning("인증코드를 입력해주세요.")
+                else:
+                    try:
+                        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+                        response = client.auth.verify_otp({
+                            "email": st.session_state["pw_reset_email"],
+                            "token": otp_code,
+                            "type": "email",
+                        })
+                        if response.session:
+                            st.session_state["pw_reset_session"] = {
+                                "access_token": response.session.access_token,
+                                "refresh_token": response.session.refresh_token,
+                            }
+                            st.session_state["pw_reset_step"] = "new_password"
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"인증 실패: {e}")
+
+        elif step == "new_password":
+            st.success("✅ 본인 확인 완료! 새 비밀번호를 설정해주세요.")
+            with st.form("reset_newpw_form"):
+                new_pw = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상")
+                new_pw2 = st.text_input("새 비밀번호 확인", type="password")
+                save_btn = st.form_submit_button("🔒 비밀번호 변경", type="primary", use_container_width=True)
+            if save_btn:
+                if not new_pw or not new_pw2:
+                    st.warning("비밀번호를 입력해주세요.")
+                elif new_pw != new_pw2:
+                    st.error("❌ 비밀번호가 일치하지 않습니다.")
+                elif len(new_pw) < 6:
+                    st.warning("6자리 이상으로 설정해주세요.")
+                else:
+                    try:
+                        reset_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+                        rs = st.session_state["pw_reset_session"]
+                        reset_client.auth.set_session(rs["access_token"], rs["refresh_token"])
+                        reset_client.auth.update_user({"password": new_pw})
+                        st.success("✅ 비밀번호가 변경되었습니다! 위 로그인 폼에서 로그인해주세요.")
+                        for k in ["pw_reset_step", "pw_reset_email", "pw_reset_session"]:
+                            st.session_state.pop(k, None)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"변경 실패: {e}")
+
 
 # [추가] 로그인 안 되어 있으면 여기서 멈춤
 if not st.session_state.get("supabase_session"):
@@ -1505,6 +1584,28 @@ with tab2:
 #   대신 사용자가 본인 데이터를 언제든 추출/이전 가능하게 함
 with tab3:
     st.header("⚙️ 설정 및 데이터 관리")
+
+    # 비밀번호 변경 (로그인 상태)
+    st.markdown("### 🔑 비밀번호 변경")
+    with st.form("change_pw_form", clear_on_submit=True):
+        cp_new = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상")
+        cp_new2 = st.text_input("새 비밀번호 확인", type="password")
+        cp_btn = st.form_submit_button("🔒 변경하기", type="primary")
+    if cp_btn:
+        if not cp_new or not cp_new2:
+            st.warning("모든 항목을 입력해주세요.")
+        elif cp_new != cp_new2:
+            st.error("❌ 비밀번호가 일치하지 않습니다.")
+        elif len(cp_new) < 6:
+            st.warning("6자리 이상으로 설정해주세요.")
+        else:
+            try:
+                supabase.auth.update_user({"password": cp_new})
+                st.success("✅ 비밀번호가 변경되었습니다.")
+            except Exception as e:
+                st.error(f"변경 실패: {e}")
+
+    st.markdown("---")
 
     st.markdown("### 💾 내 일기 데이터 내보내기")
     st.caption("내 모든 일기와 AI 피드백을 JSON 파일로 받아갈 수 있습니다. (백업, 다른 도구로 이전 등)")
