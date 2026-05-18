@@ -122,21 +122,18 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     render_upload_section(supabase, ai_client, selected_tags)
 
     # ==========================================
-    # 📊 5. 나의 투자 능력치 종합 (항상 표시)
+    # 📊 5. 나의 투자 능력치 종합 (접힌 상태로 시작)
     # ==========================================
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("#### 📊 나의 투자 능력치 종합")
-    st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>최근 30일 동안의 기록 패턴을 분석한 결과입니다.</p>", unsafe_allow_html=True)
-    
-    if zen_mode:
-        banner("🌿 <b>동굴 모드 작동 중</b><br>현재 점수와 투자 능력치 차트가 가려져 있습니다. 천천히 흔들리지 않는 마음이 가장 든든한 무기입니다.", type="success")
-    else:
-        # [수정] calculate_scores에 st.session_state["user_id"] 를 추가적으로 넘겨주어 보안 패치 반영
-        current_scores = calculate_scores(supabase, st.session_state.get("user_id", ""))
-        
-        radar_fig = render_radar_chart(current_scores)
-        st.plotly_chart(radar_fig, use_container_width=True)
-        
-        streak_days = int(current_scores['성실도'] // 3.3)
-        banner(f"🔥 현재 <b>{streak_days}일 연속</b> 기록 중입니다! 멋진 페이스를 보여주고 계시네요.", type="info")
+    with st.expander("📊 나의 투자 능력치 종합 (터치하여 펼치기)", expanded=False):
+        st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>최근 30일 동안의 기록 패턴을 분석한 결과입니다.</p>", unsafe_allow_html=True)
+
+        if zen_mode:
+            banner("🌿 <b>동굴 모드 작동 중</b><br>현재 점수와 투자 능력치 차트가 가려져 있습니다. 천천히 흔들리지 않는 마음이 가장 든든한 무기입니다.", type="success")
+        else:
+            current_scores = calculate_scores(supabase, st.session_state.get("user_id", ""))
+            radar_fig = render_radar_chart(current_scores)
+            st.plotly_chart(radar_fig, use_container_width=True)
+            streak_days = int(current_scores['성실도'] // 3.3)
+            banner(f"🔥 현재 <b>{streak_days}일 연속</b> 기록 중입니다! 멋진 페이스를 보여주고 계시네요.", type="info")
