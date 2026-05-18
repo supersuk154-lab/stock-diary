@@ -785,7 +785,7 @@ with tab1:
         my_portfolio = get_real_inventory(st.session_state["user_id"])
 
         if not my_portfolio:
-            st.info("아직 텅 비어있네요! 💸 이번 달은 삼성전자나 Alphabet 같은 든든한 자산을 모아 첫 기록을 남겨보는 건 어떨까요?")
+            st.info("아직 텅 비어있네요! 💸 첫 매수 기록을 남겨보세요.")
         else:
             # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 TICKER_MAP 폴백)
             all_tickers = tuple(
@@ -798,85 +798,141 @@ with tab1:
             bulk_prices = get_realtime_prices_bulk(all_tickers, time_bucket=_tb) if all_tickers else {}
             usd_rate = get_usd_to_krw(time_bucket=_tb)
 
-            # ── 총 평가 자산 계산 ──────────────────────────────────────
+            # ── 종목별 평가금액 + 투자원금 계산 ──────────────────────
             total_krw = 0.0
+            cost_krw = 0.0
             all_priced = True
+            item_values = {}  # 종목별 평가금액(KRW 환산) — 비중 계산용
             for _item in my_portfolio:
                 _ticker = _item.get("티커") or TICKER_MAP.get(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
-                if _price and _item["수량"] > 0:
-                    if _item["통화"] == "KRW":
-                        total_krw += _price * _item["수량"]
-                    else:
-                        total_krw += _price * _item["수량"] * usd_rate
+                _qty = _item["수량"]
+                _avg = _item["평단가"]
+                _is_krw = _item["통화"] == "KRW"
+                if _price and _qty > 0:
+                    _val_krw = _price * _qty if _is_krw else _price * _qty * usd_rate
+                    total_krw += _val_krw
+                    item_values[_item["종목"]] = _val_krw
                 else:
                     all_priced = False
+                    item_values[_item["종목"]] = 0.0
+                if _avg > 0 and _qty > 0:
+                    cost_krw += (_avg * _qty) if _is_krw else (_avg * _qty * usd_rate)
 
+            # ── 정렬 선택 ─────────────────────────────────────────────
+            sort_key = st.radio(
+                "정렬",
+                ["평가금액순", "수익률순", "이름순"],
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+            if sort_key == "평가금액순":
+                my_portfolio = sorted(my_portfolio, key=lambda x: item_values.get(x["종목"], 0), reverse=True)
+            elif sort_key == "수익률순":
+                def _rate(item):
+                    ticker = item.get("티커") or TICKER_MAP.get(item["종목"])
+                    cp = bulk_prices.get(ticker) if ticker else None
+                    if cp and item["평단가"] > 0:
+                        return (cp - item["평단가"]) / item["평단가"]
+                    return -999
+                my_portfolio = sorted(my_portfolio, key=_rate, reverse=True)
+            else:
+                my_portfolio = sorted(my_portfolio, key=lambda x: x["종목"])
+
+            # ── 총 평가 자산 카드 ──────────────────────────────────────
             if total_krw > 0:
                 _note = "" if all_priced else " <span style='font-size:0.7em;opacity:0.75;'>(일부 종목 제외)</span>"
+                total_profit_krw = total_krw - cost_krw
+                total_profit_rate = (total_profit_krw / cost_krw * 100) if cost_krw > 0 else 0
+                profit_sign = "+" if total_profit_krw >= 0 else ""
+                profit_color = "rgba(255,100,100,0.9)" if total_profit_krw >= 0 else "rgba(120,180,255,0.9)"
+                cost_visible = cost_krw > 0
                 st.markdown(f"""
                 <div style="background:linear-gradient(135deg,#3182F6 0%,#1a6fd8 100%);
                             border-radius:16px; padding:20px 24px; margin-bottom:16px; color:white;">
                     <div style="font-size:0.82em; opacity:0.85;">총 평가 자산{_note}</div>
                     <div style="font-size:1.65em; font-weight:800; margin:4px 0; letter-spacing:-0.5px;">
                         {total_krw:,.0f}원</div>
+                    {'<div style="font-size:0.88em; margin-bottom:4px; color:' + profit_color + ';">' +
+                      profit_sign + f'{total_profit_krw:,.0f}원 ({profit_sign}{total_profit_rate:.2f}%)</div>'
+                      if cost_visible else ''}
                     <div style="font-size:0.78em; opacity:0.7;">환율 적용: 1$ = {usd_rate:,.0f}원</div>
                 </div>""", unsafe_allow_html=True)
 
+            # ── 종목 카드 목록 ────────────────────────────────────────
             rows_html = ""
             for item in my_portfolio:
                 ticker = item.get("티커") or TICKER_MAP.get(item["종목"])
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
-                currency = "원" if item["통화"] == "KRW" else "$"
+                is_krw = item["통화"] == "KRW"
+                currency = "원" if is_krw else "$"
+                flag = "🇰🇷" if is_krw else "🇺🇸"
 
-                # 1. 오른쪽 상단: 현재가 또는 평단가(지연됨) 폴백
+                # 평가금액 (KRW 환산)
+                val_krw = item_values.get(item["종목"], 0.0)
+                weight_pct = (val_krw / total_krw * 100) if total_krw > 0 else 0
+
+                # 현재가 표시
                 if has_valid_price:
-                    price_str = f"{current_price:,.0f}" if item["통화"] == "KRW" else f"{current_price:,.2f}"
+                    price_str = f"{current_price:,.0f}" if is_krw else f"{current_price:,.2f}"
                     price_html = f'<span style="font-weight:700; font-size:1.05em; color:#191F28;">{price_str}{currency}</span>'
                 elif item["평단가"] > 0:
-                    avg_str = f"{item['평단가']:,.0f}" if item["통화"] == "KRW" else f"{item['평단가']:,.2f}"
+                    avg_str = f"{item['평단가']:,.0f}" if is_krw else f"{item['평단가']:,.2f}"
                     price_html = (f'<span style="font-weight:700; font-size:1.05em; color:#8B95A1;">'
                                   f'{avg_str}{currency}</span>'
                                   f'<span style="font-size:0.72em; color:#B0B8C1;"> (지연됨 📡)</span>')
                 else:
                     price_html = '<span style="font-weight:600; font-size:0.9em; color:#8B95A1;">수신 지연 📡</span>'
 
-                # 2. 오른쪽 하단: 수익률 또는 상태 표시
+                # 수익률 + 수익금
                 if has_valid_price and item["평단가"] > 0:
                     profit_rate = ((current_price - item["평단가"]) / item["평단가"]) * 100
-                    sign = "+" if profit_rate > 0 else ""
-                    # 토스 스타일 증권 색상: 빨강(상승), 파랑(하락), 회색(보합)
-                    if profit_rate > 0:
-                        rate_color = "#F04452"
-                    elif profit_rate < 0:
-                        rate_color = "#3182F6"
-                    else:
-                        rate_color = "#8B95A1"
-                    rate_html = f'<span style="color:{rate_color}; font-weight:600; font-size:0.85em;">{sign}{profit_rate:.2f}%</span>'
+                    profit_amt = (current_price - item["평단가"]) * item["수량"]
+                    profit_amt_krw = profit_amt if is_krw else profit_amt * usd_rate
+                    sign = "+" if profit_rate >= 0 else ""
+                    rate_color = "#F04452" if profit_rate > 0 else ("#3182F6" if profit_rate < 0 else "#8B95A1")
+                    amt_str = f"{profit_amt_krw:+,.0f}원"
+                    rate_html = (f'<span style="color:{rate_color}; font-weight:600; font-size:0.85em;">'
+                                 f'{sign}{profit_rate:.2f}% ({amt_str})</span>')
                 elif not ticker:
-                    rate_html = '<span style="color:#B0B8C1; font-size:0.8em;">티커 미등록</span>'
+                    rate_html = '<span style="color:#B0B8C1; font-size:0.8em;">실시간 가격을 불러올 수 없는 종목입니다.</span>'
                 else:
                     rate_html = '<span style="color:#B0B8C1; font-size:0.8em;">단가 미기록</span>'
 
-                # 3. 모바일 앱 스타일의 하얀색 카드(Card) UI 렌더링
+                # 평가금액 문자열
+                if val_krw > 0:
+                    eval_html = f'<span style="font-size:0.8em; color:#8B95A1;">평가 {val_krw:,.0f}원</span>'
+                else:
+                    eval_html = ''
+
+                # 비중 바
+                bar_html = (
+                    f'<div style="margin-top:8px; background:#F2F4F6; border-radius:4px; height:3px;">'
+                    f'<div style="width:{weight_pct:.1f}%; background:#3182F6; height:3px; border-radius:4px;"></div>'
+                    f'</div>'
+                ) if total_krw > 0 else ''
+
                 rows_html += f"""
-                <div style="display:flex; justify-content:space-between; align-items:center;
-                            padding:16px; border-radius:16px; margin-bottom:12px;
+                <div style="padding:16px; border-radius:16px; margin-bottom:12px;
                             background-color:#FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
                             border: 1px solid #F2F4F6;">
-                    <div style="line-height:1.4;">
-                        <div style="font-weight:700; font-size:1.05em; color:#333D4B;">{item['종목']}</div>
-                        <div style="color:#8B95A1; font-size:0.85em;">{item['수량']:,.0f}주 보유</div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div style="line-height:1.4;">
+                            <div style="font-weight:700; font-size:1.05em; color:#333D4B;">
+                                {flag} {item['종목']}</div>
+                            <div style="color:#8B95A1; font-size:0.85em;">{item['수량']:,.0f}주 보유</div>
+                        </div>
+                        <div style="text-align:right; line-height:1.4;">
+                            <div>{price_html}</div>
+                            <div>{eval_html}</div>
+                            <div>{rate_html}</div>
+                        </div>
                     </div>
-                    <div style="text-align:right; line-height:1.4;">
-                        <div>{price_html}</div>
-                        <div>{rate_html}</div>
-                    </div>
+                    {bar_html}
                 </div>"""
 
             st.markdown(rows_html, unsafe_allow_html=True)
-            st.caption("💡 '티커 미등록' 종목은 app.py의 TICKER_MAP에 야후파이낸스 코드를 추가하면 실시간 연동됩니다.")
 
             # ── 누적 배당금 요약 ─────────────────────────────────────
             div_totals = get_dividend_total(st.session_state["user_id"])
