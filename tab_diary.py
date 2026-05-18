@@ -6,7 +6,7 @@ import os
 from prices import get_market_weather, _market_time_bucket, TICKER_MAP, get_realtime_price, get_realtime_prices_bulk, get_usd_to_krw
 from db import KST, get_past_context, has_tag, get_real_inventory, get_dividend_total, calculate_scores, get_recent_journals
 from ai_helper import safe_generate
-from ui_components import render_radar_chart
+from ui_components import render_radar_chart, banner, card
 
 KR_MIN_WAGE_2026 = 10_320
 def _get_active_wage() -> int:
@@ -265,11 +265,12 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     # ==========================================
     # 🦇 [신규] 동굴 모드 (Zen Mode) 스위치
     # ==========================================
-    zen_mode = st.toggle(
+    zen_mode = st.sidebar.toggle(
         "🦇 동굴 모드 켜기",
         value=False,
         help="시장이 폭락해 멘탈이 흔들릴 때 켜세요. 모든 수익률과 숫자를 가려줍니다."
     )
+
     
     # ---------------------------------------------------------
     # 🌤️ 증시 날씨판 — zen_mode 일 땐 숨김
@@ -1145,17 +1146,22 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     # ==========================================
     # 📊 [이동됨] 나의 투자 능력치 (tab1 최하단 - 단계와 무관하게 항상 표시)
     # ==========================================
-    st.markdown("<br><br><br>", unsafe_allow_html=True)  # 위 콘텐츠와 간격 벌리기
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.markdown("---")
-    st.subheader("📊 나의 투자 능력치 종합")
+    st.markdown("#### 📊 나의 투자 능력치 종합")
+    st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>최근 30일 동안의 기록 패턴을 분석한 결과입니다.</p>", unsafe_allow_html=True)
     
     if zen_mode:
-        st.info("🌿 **동굴 모드 작동 중**\n\n현재 점수와 능력치 차트를 숨겨두었습니다. 흔들리지 않는 멘탈이 가장 중요합니다.")
+        banner("🌿 <b>동굴 모드 작동 중</b><br>현재 점수와 투자 능력치 차트가 가려져 있습니다. 천천히 흔들리지 않는 마음이 가장 든든한 무기입니다.", type="success")
     else:
         current_scores = calculate_scores(supabase)
+        
+        # 레이아웃을 카드로 깔끔하게 감싸기
         radar_fig = render_radar_chart(current_scores)
         st.plotly_chart(radar_fig, use_container_width=True)
-        st.info(f"🔥 현재 연속 기록(Streak): **{int(current_scores['성실도'] // 3.3)}일**")
+        
+        streak_days = int(current_scores['성실도'] // 3.3)
+        banner(f"🔥 현재 <b>{streak_days}일 연속</b> 기록 중입니다! 멋진 페이스를 보여주고 계시네요.", type="info")
     
     # ---------------------------------------------------------
     # 탭 2: 과거 기록 조회

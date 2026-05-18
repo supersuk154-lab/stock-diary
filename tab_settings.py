@@ -2,34 +2,39 @@ import streamlit as st
 import json
 import datetime
 from db import to_kst_str, KST, get_recent_journals, get_real_inventory
+from ui_components import card, banner
 
 def render_settings_tab(supabase):
-    st.header("⚙️ 설정 및 데이터 관리")
+    st.markdown("### ⚙️ 설정 및 데이터 관리")
+    st.markdown("<p style='color: #4E5968; font-size: 0.95em;'>비밀번호를 재설정하거나 안전하게 데이터를 백업 및 삭제할 수 있습니다.</p>", unsafe_allow_html=True)
 
-    # 비밀번호 변경 (로그인 상태)
-    st.markdown("### 🔑 비밀번호 변경")
+    # 1. 비밀번호 변경
+    st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
+    st.markdown("#### 🔑 비밀번호 변경")
+    
     with st.form("change_pw_form", clear_on_submit=True):
-        cp_new = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상")
-        cp_new2 = st.text_input("새 비밀번호 확인", type="password")
-        cp_btn = st.form_submit_button("🔒 변경하기", type="primary")
+        cp_new = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상 입력해주세요")
+        cp_new2 = st.text_input("새 비밀번호 확인", type="password", placeholder="한번 더 입력해주세요")
+        cp_btn = st.form_submit_button("🔒 변경 사항 저장", type="primary")
+        
     if cp_btn:
         if not cp_new or not cp_new2:
-            st.warning("모든 항목을 입력해주세요.")
+            banner("비밀번호 항목을 모두 입력해주세요.", type="warning")
         elif cp_new != cp_new2:
-            st.error("❌ 비밀번호가 일치하지 않습니다.")
+            banner("입력하신 두 비밀번호가 일치하지 않습니다.", type="error")
         elif len(cp_new) < 6:
-            st.warning("6자리 이상으로 설정해주세요.")
+            banner("비밀번호는 최소 6자리 이상이어야 합니다.", type="warning")
         else:
             try:
                 supabase.auth.update_user({"password": cp_new})
-                st.success("✅ 비밀번호가 변경되었습니다.")
+                banner("비밀번호가 성공적으로 변경되었습니다. 🎉", type="success")
             except Exception as e:
-                st.error(f"변경 실패: {e}")
+                banner(f"변경에 실패했습니다: {e}", type="error")
 
+    # 2. 내 일기 데이터 내보내기
     st.markdown("---")
-
-    st.markdown("### 💾 내 일기 데이터 내보내기")
-    st.caption("내 모든 일기와 AI 피드백을 JSON 파일로 받아갈 수 있습니다. (백업, 다른 도구로 이전 등)")
+    st.markdown("#### 💾 데이터 내보내기 및 백업")
+    st.markdown("<p style='color: #8B95A1; font-size: 0.88em; margin-bottom: 12px;'>사용자가 기록한 모든 주식 일기와 AI 피드백을 JSON 파일로 즉시 다운로드하여 소장할 수 있습니다.</p>", unsafe_allow_html=True)
 
     try:
         all_rows = (
@@ -41,7 +46,6 @@ def render_settings_tab(supabase):
         )
 
         if all_rows:
-            # 사람이 읽기 좋게 변환
             export_data = [{
                 "created_at_kst": to_kst_str(r["created_at"]),
                 "tags": r.get("tags") or "",
@@ -53,32 +57,38 @@ def render_settings_tab(supabase):
             today_str = datetime.datetime.now(KST).strftime("%Y%m%d")
 
             st.download_button(
-                label=f"📥 내 일기 {len(all_rows)}개 JSON으로 다운로드",
+                label=f"📥 내 일기 {len(all_rows)}개 백업 파일 다운로드 (.json)",
                 data=json_bytes,
                 file_name=f"my_stock_diary_backup_{today_str}.json",
                 mime="application/json",
             )
         else:
-            st.info("아직 저장된 일기가 없습니다.")
+            banner("아직 저장된 일기가 없어서 백업을 생성할 수 없습니다.", type="info")
     except Exception as e:
-        st.error(f"데이터 조회 실패: {e}")
+        banner(f"백업 데이터 조회 실패: {e}", type="error")
 
+    # 3. 데이터 보안 및 프라이버시 안내
     st.markdown("---")
-    st.markdown("### ℹ️ 데이터 저장 위치 및 프라이버시")
-    st.info(
-        "이 앱의 모든 데이터는 철저하게 암호화되어 **Supabase 클라우드**에 안전하게 보관됩니다.\n\n"
-        "- **독립된 공간:** 다른 사용자는 본인의 일기를 절대 볼 수 없습니다 (RLS 보안 적용).\n"
-        "- **AI 프라이버시:** AI 멘토와의 실시간 대화 내용이나 임시 캡처 사진은 화면을 새로고침하거나 "
-        "대화를 초기화하면 즉시 휘발되며, 모델 학습에 영구적으로 저장되지 않습니다."
-    )
+    st.markdown("#### 🛡️ 데이터 보안 및 개인정보 처리방침")
+    
+    security_info = """
+    이 서비스의 모든 개인 데이터는 철저하게 암호화되어 글로벌 보안 표준을 준수하는 <b>Supabase Cloud</b> 데이터베이스에 안전하게 보관됩니다.
+    <br><br>
+    <ul>
+        <li><b>독립된 유저 공간:</b> 개별 사용자 정보는 행 단위 보안 정책(RLS, Row Level Security)에 의해 타인이 절대 조회할 수 없도록 철저히 격리됩니다.</li>
+        <li><b>휘발성 AI 분석:</b> AI 멘토와의 일시적인 대화나 분석 목적의 캡처 이미지는 저장되지 않고 세션 종료 즉시 메모리에서 영구 삭제됩니다.</li>
+    </ul>
+    """
+    card("안전한 데이터 보관 환경", security_info, icon="🔒")
 
+    # 4. 계정 데이터 영구 삭제
     st.markdown("---")
-    st.markdown("### 🗑️ 계정 데이터 삭제")
-    st.caption("⚠️ 이 작업은 되돌릴 수 없습니다.")
+    st.markdown("<h4 style='color: #E03131;'>⚠️ 계정 데이터 삭제</h4>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>이 작업은 복구가 불가능합니다. 신중히 결정해 주세요.</p>", unsafe_allow_html=True)
 
-    with st.expander("내 모든 일기 삭제 (주의)"):
-        confirm = st.text_input('확인 문구로 "삭제합니다" 를 입력하세요', key="delete_confirm")
-        if st.button("💥 내 모든 일기 영구 삭제", type="primary"):
+    with st.expander("🚨 나의 모든 정보 영구 삭제"):
+        confirm = st.text_input('본인 확인을 위해 아래 입력창에 "삭제합니다"를 입력해주세요', key="delete_confirm")
+        if st.button("💥 계정 데이터 및 기록 영구 삭제", type="primary"):
             if confirm == "삭제합니다":
                 try:
                     _uid = st.session_state["user_id"]
@@ -86,9 +96,9 @@ def render_settings_tab(supabase):
                     supabase.table("trades").delete().eq("user_id", _uid).execute()
                     get_recent_journals.clear()
                     get_real_inventory.clear()
-                    st.success("모든 일기와 매매 기록이 삭제되었습니다.")
+                    banner("모든 기록이 영구적으로 안전하게 삭제되었습니다. 초기 화면으로 이동합니다.", type="success")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"삭제 실패: {e}")
+                    banner(f"삭제에 실패했습니다: {e}", type="error")
             else:
-                st.warning('확인 문구를 정확히 입력해주세요.')
+                banner("확인 문구가 정확하지 않습니다. 다시 입력해주세요.", type="warning")
