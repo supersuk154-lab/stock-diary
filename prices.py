@@ -32,50 +32,14 @@ TICKER_MAP = {
 }
 
 
-@st.cache_data(ttl=86400)
-def load_krx_ticker_map() -> dict:
-    """KRX 전체 상장 종목(ETF + KOSPI + KOSDAQ)을 pykrx로 가져와
-    {종목명: "코드.KS"} 맵을 반환한다. 24시간 캐시."""
-    try:
-        from pykrx import stock as krx
-        today = datetime.datetime.now(KST).strftime("%Y%m%d")
-        result = {}
-
-        # ETF
-        for code in krx.get_etf_ticker_list(today):
-            name = krx.get_etf_ticker_name(code)
-            if name:
-                result[name] = f"{code}.KS"
-
-        # KOSPI 개별주
-        for code in krx.get_market_ticker_list(today, market="KOSPI"):
-            name = krx.get_market_ticker_name(code)
-            if name:
-                result[name] = f"{code}.KS"
-
-        # KOSDAQ 개별주
-        for code in krx.get_market_ticker_list(today, market="KOSDAQ"):
-            name = krx.get_market_ticker_name(code)
-            if name:
-                result[name] = f"{code}.KQ"
-
-        # 수동 보정 맵으로 덮어쓰기 (별칭·약칭 우선 보장)
-        result.update(TICKER_MAP)
-        return result
-
-    except Exception:
-        # pykrx 오류 시 수동 맵만으로 운영
-        return dict(TICKER_MAP)
-
-
-def resolve_ticker(stock_name: str, ticker_hint: str = "") -> str | None:
+def resolve_ticker(stock_name: str, ticker_hint: str = "", krx_map: dict | None = None) -> str | None:
     """종목명 → 야후파이낸스 티커 변환.
-    1순위: KRX 동적 맵 (pykrx)
-    2순위: AI ticker_hint (미국주식)
-    3순위: None"""
-    krx_map = load_krx_ticker_map()
+    1순위: krx_map (Supabase에서 로드한 KRX 전체 맵)
+    2순위: TICKER_MAP (수동 보정 맵)
+    3순위: AI ticker_hint (미국주식)"""
+    base = krx_map if krx_map is not None else TICKER_MAP
     normalized = " ".join(stock_name.split())
-    ticker = krx_map.get(normalized) or krx_map.get(stock_name)
+    ticker = base.get(normalized) or base.get(stock_name)
     if not ticker and ticker_hint:
         ticker = ticker_hint.strip() or None
     return ticker

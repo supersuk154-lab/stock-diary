@@ -7,7 +7,7 @@ import math
 import datetime
 from datetime import timezone, timedelta
 from pathlib import Path
-from prices import get_realtime_prices_bulk, get_realtime_price, get_usd_to_krw, _market_time_bucket, resolve_ticker, load_krx_ticker_map
+from prices import TICKER_MAP, get_realtime_prices_bulk, get_realtime_price, get_usd_to_krw, _market_time_bucket, resolve_ticker
 
 
 # [변경] 이미지 처리 라이브러리는 그대로
@@ -394,6 +394,19 @@ if not st.session_state.get("supabase_session"):
 
 # [추가] 로그인 완료 후 사용할 Supabase 클라이언트
 supabase = get_supabase()
+
+
+@st.cache_data(ttl=3600)
+def load_krx_ticker_map(_supabase) -> dict:
+    """Supabase krx_tickers 테이블 → {종목명: ticker} 맵. TICKER_MAP으로 보정 후 반환."""
+    try:
+        rows = _supabase.table("krx_tickers").select("name, ticker").execute().data
+        result = {r["name"]: r["ticker"] for r in rows if r.get("name") and r.get("ticker")}
+        result.update(TICKER_MAP)  # 수동 보정 맵이 항상 우선
+        return result
+    except Exception:
+        return dict(TICKER_MAP)
+
 
 # 로그인 직후 Supabase user_metadata에서 멘토 설정 복구
 if "chosen_mentor" not in st.session_state:
@@ -787,10 +800,11 @@ with tab1:
         if not my_portfolio:
             st.info("아직 텅 비어있네요! 💸 첫 매수 기록을 남겨보세요.")
         else:
-            # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 pykrx 동적 맵 폴백)
+            krx_map = load_krx_ticker_map(supabase)
+            # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 KRX 맵 폴백)
             all_tickers = tuple(
                 t for t in (
-                    item.get("티커") or resolve_ticker(item["종목"])
+                    item.get("티커") or resolve_ticker(item["종목"], krx_map=krx_map)
                     for item in my_portfolio
                 ) if t
             )
@@ -804,7 +818,7 @@ with tab1:
             all_priced = True
             item_values = {}  # 종목별 평가금액(KRW 환산) — 비중 계산용
             for _item in my_portfolio:
-                _ticker = _item.get("티커") or resolve_ticker(_item["종목"])
+                _ticker = _item.get("티커") or resolve_ticker(_item["종목"], krx_map=krx_map)
                 _price = bulk_prices.get(_ticker) if _ticker else None
                 _qty = _item["수량"]
                 _avg = _item["평단가"]
@@ -830,7 +844,7 @@ with tab1:
                 my_portfolio = sorted(my_portfolio, key=lambda x: item_values.get(x["종목"], 0), reverse=True)
             elif sort_key == "수익률순":
                 def _rate(item):
-                    ticker = item.get("티커") or resolve_ticker(item["종목"])
+                    ticker = item.get("티커") or resolve_ticker(item["종목"], krx_map=krx_map)
                     cp = bulk_prices.get(ticker) if ticker else None
                     if cp and item["평단가"] > 0:
                         return (cp - item["평단가"]) / item["평단가"]
@@ -862,7 +876,7 @@ with tab1:
             # ── 종목 카드 목록 ────────────────────────────────────────
             rows_html = ""
             for item in my_portfolio:
-                ticker = item.get("티커") or resolve_ticker(item["종목"])
+                ticker = item.get("티커") or resolve_ticker(item["종목"], krx_map=krx_map)
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
                 is_krw = item["통화"] == "KRW"
@@ -1444,7 +1458,7 @@ with tab1:
                             for trade in extracted_trades:
                                 raw_name   = trade["stock_name"]
                                 normalized = " ".join(raw_name.split())
-                                ticker     = resolve_ticker(normalized, trade.get("ticker_hint") or "")
+                                ticker     = resolve_ticker(normalized, trade.get("ticker_hint") or "", krx_map=load_krx_ticker_map(supabase))
                                 trade["_normalized_name"] = normalized
                                 trade["_ticker"]          = ticker
                                 if ticker:
@@ -1583,6 +1597,49 @@ with tab2:
 #   대신 사용자가 본인 데이터를 언제든 추출/이전 가능하게 함
 with tab3:
     st.header("⚙️ 설정 및 데이터 관리")
+
+    # ── 관리자 전용: KRX 티커 목록 업로드 ───────────────────────
+    _admin_email = st.secrets.get("ADMIN_EMAIL", "")
+    _user_email  = st.session_state.get("user_email", "")
+    if _admin_email and _user_email == _admin_email:
+        st.markdown("### 🔧 [관리자] KRX 티커 목록 업데이트")
+        st.caption(
+            "KRX 사이트 → 시장정보 → ETF → 전체종목 → 다운로드(Excel)한 파일을 올려주세요. "
+            "업로드 즉시 모든 사용자에게 적용됩니다."
+        )
+        uploaded = st.file_uploader("KRX ETF 목록 Excel", type=["xlsx", "xls", "csv"], key="krx_upload")
+        if uploaded:
+            try:
+                import pandas as pd
+                if uploaded.name.endswith(".csv"):
+                    df = pd.read_csv(uploaded, dtype=str)
+                else:
+                    df = pd.read_excel(uploaded, dtype=str)
+
+                # 컬럼명 유연하게 탐색
+                name_col = next((c for c in df.columns if "종목명" in c or c == "Name"), None)
+                code_col = next((c for c in df.columns if "종목코드" in c or "단축코드" in c or c in ("Code", "Symbol")), None)
+
+                if not name_col or not code_col:
+                    st.error(f"컬럼을 찾지 못했습니다. 파일 컬럼: {list(df.columns)}")
+                else:
+                    rows = []
+                    for _, row in df.iterrows():
+                        name = str(row[name_col]).strip()
+                        code = str(row[code_col]).strip().zfill(6)
+                        if name and code and name != "nan":
+                            rows.append({"name": name, "ticker": f"{code}.KS"})
+
+                    if rows:
+                        supabase.table("krx_tickers").upsert(rows, on_conflict="name").execute()
+                        load_krx_ticker_map.clear()
+                        st.success(f"✅ {len(rows)}개 종목 업데이트 완료!")
+                    else:
+                        st.warning("파싱된 데이터가 없습니다. 파일을 확인해주세요.")
+            except Exception as e:
+                st.error(f"업로드 실패: {e}")
+
+        st.markdown("---")
 
     # 비밀번호 변경 (로그인 상태)
     st.markdown("### 🔑 비밀번호 변경")
