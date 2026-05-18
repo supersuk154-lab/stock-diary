@@ -1670,47 +1670,80 @@ with tab3:
                         updated, skipped, failed = 0, 0, 0
                         prog = st.progress(0)
                         status = st.empty()
-                        total = len(retro_trades)
 
-                        for i, trade in enumerate(retro_trades):
-                            prog.progress((i + 1) / total)
-                            trade_id   = trade["id"]
-                            stock_name = trade["stock_name"]
-                            ticker     = trade.get("ticker") or resolve_ticker(stock_name, krx_map=_krx_map)
-                            status.text(f"처리 중: {stock_name} ({i+1}/{total})")
-
+                        # 티커별로 묶기 (같은 티커 → yfinance 1회 호출로 처리)
+                        ticker_groups: dict[str, list[dict]] = {}
+                        no_ticker_trades = []
+                        for trade in retro_trades:
+                            ticker = trade.get("ticker") or resolve_ticker(trade["stock_name"], krx_map=_krx_map)
                             if not ticker:
-                                skipped += 1
-                                continue
+                                no_ticker_trades.append(trade)
+                            else:
+                                trade["_ticker"] = ticker
+                                ticker_groups.setdefault(ticker, []).append(trade)
+
+                        skipped = len(no_ticker_trades)
+                        unique_tickers = list(ticker_groups.keys())
+                        total_tickers = len(unique_tickers)
+
+                        for t_idx, ticker in enumerate(unique_tickers):
+                            prog.progress((t_idx + 1) / max(total_tickers, 1))
+                            status.text(f"티커 조회 중: {ticker} ({t_idx+1}/{total_tickers})")
+                            trades_for_ticker = ticker_groups[ticker]
 
                             try:
-                                date_str = trade["created_at"][:10]
-                                start_dt = datetime.date.fromisoformat(date_str)
-                                end_dt   = start_dt + datetime.timedelta(days=7)
+                                dates = [
+                                    datetime.date.fromisoformat(t["created_at"][:10])
+                                    for t in trades_for_ticker
+                                ]
+                                fetch_start = min(dates)
+                                fetch_end   = max(dates) + datetime.timedelta(days=7)
                                 hist = _yf.Ticker(ticker).history(
-                                    start=start_dt.isoformat(),
-                                    end=end_dt.isoformat(),
+                                    start=fetch_start.isoformat(),
+                                    end=fetch_end.isoformat(),
                                     auto_adjust=True,
                                 )
                                 if hist.empty:
-                                    failed += 1
+                                    failed += len(trades_for_ticker)
                                     continue
-                                price = float(hist["Close"].iloc[0])
-                                if math.isnan(price) or price <= 0:
-                                    failed += 1
-                                    continue
-                                supabase.table("trades").update({
-                                    "price":  price,
-                                    "ticker": ticker,
-                                }).eq("id", trade_id).execute()
-                                updated += 1
+
+                                # 날짜 인덱스를 date 객체로 변환해 룩업 테이블 생성
+                                hist.index = hist.index.date
+                                price_cache: dict[datetime.date, float] = {}
+                                for d in sorted(hist.index):
+                                    price_cache[d] = float(hist.loc[d, "Close"])
+
+                                for trade in trades_for_ticker:
+                                    trade_date = datetime.date.fromisoformat(trade["created_at"][:10])
+                                    # 거래일이 휴장일이면 이후 첫 영업일 가격 사용
+                                    price = None
+                                    for offset in range(7):
+                                        lookup = trade_date + datetime.timedelta(days=offset)
+                                        if lookup in price_cache:
+                                            price = price_cache[lookup]
+                                            break
+
+                                    if price is None or math.isnan(price) or price <= 0:
+                                        failed += 1
+                                        continue
+
+                                    supabase.table("trades").update({
+                                        "price":  price,
+                                        "ticker": ticker,
+                                    }).eq("id", trade["id"]).execute()
+                                    updated += 1
+
                             except Exception:
-                                failed += 1
+                                failed += len(trades_for_ticker)
 
                         prog.empty()
                         status.empty()
                         get_real_inventory.clear()
-                        st.success(f"✅ 완료!  수정: {updated}건 · 티커 미확인: {skipped}건 · 가격 조회 실패: {failed}건")
+                        st.success(
+                            f"✅ 완료!  수정: {updated}건 · 티커 미확인: {skipped}건 · "
+                            f"가격 조회 실패: {failed}건  "
+                            f"(야후파이낸스 호출 횟수: {total_tickers}회)"
+                        )
 
                 except Exception as e:
                     st.error(f"소급 수정 실패: {e}")
