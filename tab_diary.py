@@ -9,6 +9,8 @@ from ai_helper import safe_generate
 from ui_components import render_radar_chart, banner, card
 
 KR_MIN_WAGE_2026 = 10_320
+MODEL_NAME = "gemini-3.1-flash-lite-preview"
+
 def _get_active_wage() -> int:
     try:
         if "_custom_wage" in st.session_state:
@@ -19,19 +21,6 @@ def _get_active_wage() -> int:
         return int(st.secrets.get("MY_HOURLY_WAGE", KR_MIN_WAGE_2026))
     except Exception:
         return KR_MIN_WAGE_2026
-
-        totals: dict = {"KRW": 0.0, "USD": 0.0}
-        for t in response.data:
-            cur = t.get("currency", "KRW")
-            # 신규 컬럼값이 있으면 우선 사용, 없으면 과거 quantity 사용
-            amount = t.get("dividend_amount")
-            if amount is None:
-                amount = float(t.get("quantity", 0))
-            
-            totals[cur] = totals.get(cur, 0.0) + float(amount)
-        return totals
-    except Exception:
-        return {"KRW": 0.0, "USD": 0.0}
 
 
 # ==========================================
@@ -252,6 +241,24 @@ def render_family_contributions(portfolio: list, _supabase):
 
 def get_daily_meal(daily_avg_krw: float) -> dict:
     """일 평균 배당금을 보편적인 식사/간식 메뉴로 변환."""
+    if daily_avg_krw < 500:
+        return {"icon": "🍬", "menu": "사탕 한 알", "desc": "아직은 작지만, 매일 쌓이면 달라집니다."}
+    elif daily_avg_krw < 1500:
+        return {"icon": "☕", "menu": "편의점 커피", "desc": "오늘도 자산이 커피 한 잔을 쐈습니다!"}
+    elif daily_avg_krw < 3000:
+        return {"icon": "🥐", "menu": "아메리카노 + 크루아상", "desc": "아침 카페 비용을 자산이 내주고 있어요."}
+    elif daily_avg_krw < 6000:
+        return {"icon": "🍜", "menu": "편의점 도시락", "desc": "점심 한 끼 값을 주식이 내줍니다."}
+    elif daily_avg_krw < 10000:
+        return {"icon": "🍱", "menu": "한식 백반", "desc": "매일 든든한 점심을 자산이 책임집니다."}
+    elif daily_avg_krw < 20000:
+        return {"icon": "🍖", "menu": "고기 정식", "desc": "오늘은 자산 덕분에 고기 한 판 먹을 수 있어요!"}
+    elif daily_avg_krw < 50000:
+        return {"icon": "🥩", "menu": "한우 한 점", "desc": "자산이 매일 한우를 사줍니다. 대단한 페이스입니다!"}
+    else:
+        return {"icon": "🍽️", "menu": "파인다이닝 코스", "desc": "자산이 매일 파인다이닝을 선물합니다. 진정한 FIRE!"}
+
+
 def render_diary_tab(supabase, ai_client, dev_mode):
     def sync_mentor():
         mentor = st.session_state.get("persona_widget")
@@ -744,6 +751,8 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                 )
                 
                 response_text, err = safe_generate(
+                    client=ai_client,
+                    model_name=MODEL_NAME,
                     contents=user_input.strip(),
                     config=config,
                     fallback_msg="답변 생성 중 오류가 발생했어요."
@@ -804,7 +813,9 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                     )
     
                     text, err = safe_generate(
-                        contents=[extract_prompt, image], 
+                        client=ai_client,
+                        model_name=MODEL_NAME,
+                        contents=[extract_prompt, image],
                         config=config,
                         fallback_msg="이미지 분석 중 오류가 발생했어요."
                     )
@@ -1044,6 +1055,8 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                 final_prompt = f"태그: {tag_text}\n\n사용자가 오늘 다음 종목들을 매수/확인했습니다:\n{all_data_str}\n\n이 내역을 바탕으로 전체적인 투자 평과 멘탈 관리 조언을 해줘."
     
                 final_text, err = safe_generate(
+                    client=ai_client,
+                    model_name=MODEL_NAME,
                     contents=final_prompt,
                     config=config,
                     fallback_msg="최종 피드백 생성 중 오류가 발생했어요."
