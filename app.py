@@ -1683,11 +1683,3 @@ with tab3:
                     st.error(f"삭제 실패: {e}")
             else:
                 st.warning('확인 문구를 정확히 입력해주세요.')
-                    get_recent_journals.clear()
-                    get_real_inventory.clear()
-                    st.success("모든 일기와 매매 기록이 삭제되었습니다.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"삭제 실패: {e}")
-            else:
-                st.warning('확인 문구를 정확히 입력해주세요.')
