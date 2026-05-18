@@ -1,5 +1,7 @@
 import streamlit as st
-import google.generativeai as genai
+# [수정] 새로운 google-genai SDK 임포트
+from google import genai
+from google.genai import types
 import os
 import json
 import re
@@ -7,8 +9,98 @@ import math
 import datetime
 from datetime import timezone, timedelta
 from pathlib import Path
-from prices import TICKER_MAP, get_realtime_prices_bulk, get_realtime_price, get_usd_to_krw, _market_time_bucket, resolve_ticker
+import yfinance as yf
 
+# ==========================================
+# 📈 실시간 주가 일괄 조회 엔진 (캐싱 적용)
+#   여러 티커를 한 번의 HTTP 요청으로 처리해 yfinance 밴 위험 최소화
+# ==========================================
+def _market_time_bucket() -> str:
+    """장중/장외 구분 캐시 버킷 — 장중은 15분, 장외는 1시간 단위로 변경."""
+    now = datetime.datetime.now(KST)
+    h, m = now.hour, now.minute
+    kr_open = (9, 0) <= (h, m) < (15, 30)    # 한국장: 9:00~15:30 KST
+    us_open = (h, m) >= (22, 30) or h < 5    # 미국장: 22:30~05:00 KST
+    if kr_open or us_open:
+        return f"{now.date()}-{h}-{(m // 15) * 15}"  # 15분 단위
+    return f"{now.date()}-{h}"               # 장외: 1시간 단위
+
+@st.cache_data(ttl=3600)
+def get_realtime_prices_bulk(tickers: tuple, time_bucket: str = "") -> dict:
+    """tickers: 튜플로 전달 (list는 st.cache_data 해시 불가)
+    time_bucket: 장중/장외 TTL 제어용 — _market_time_bucket() 결과 전달
+    반환: {ticker: price} 딕셔너리"""
+    if not tickers:
+        return {}
+    try:
+        data = yf.download(list(tickers), period="1d", auto_adjust=True, progress=False)
+        prices = {}
+        if data.empty:
+            return {}
+        for ticker in tickers:
+            try:
+                if len(tickers) == 1:
+                    val = float(data["Close"].iloc[-1])
+                else:
+                    val = float(data["Close"][ticker].iloc[-1])
+                prices[ticker] = None if math.isnan(val) else val
+            except Exception:
+                prices[ticker] = None
+        return prices
+    except Exception:
+        return {}
+
+
+def get_realtime_price(ticker):
+    """단일 티커 조회 — 내부적으로 bulk 함수 사용 (하위 호환용)."""
+    result = get_realtime_prices_bulk((ticker,), time_bucket=_market_time_bucket())
+    return result.get(ticker)
+
+
+@st.cache_data(ttl=3600)
+def get_usd_to_krw(time_bucket: str = "") -> float:
+    """달러→원 환율 조회 (KRW=X 티커). 실패 시 1,380원 기본값 반환."""
+    try:
+        data = yf.download("KRW=X", period="1d", auto_adjust=True, progress=False)
+        if data.empty:
+            return 1380.0
+        val = float(data["Close"].iloc[-1])
+        return val if not math.isnan(val) else 1380.0
+    except Exception:
+        return 1380.0
+
+# 우리가 모으는 주식들의 야후 파이낸스 티커(기호) 매핑 사전
+# 새 종목 추가 시: "종목명(AI가 인식한 이름과 정확히 동일)": "야후파이낸스티커"
+TICKER_MAP = {
+    # 개별 주식
+    "삼성전자": "005930.KS",
+    "SK하이닉스": "000660.KS",
+    "현대차": "005380.KS",
+    "카카오": "035720.KS",
+    "NAVER": "035420.KS",
+    "Alphabet": "GOOGL",
+    "Apple": "AAPL",
+    "Microsoft": "MSFT",
+    "NVIDIA": "NVDA",
+    "Tesla": "TSLA",
+    # KODEX ETF
+    "KODEX 200": "069500.KS",
+    "KODEX 코스닥 150": "229200.KS",
+    "KODEX 코스닥150": "229200.KS",
+    "KODEX 레버리지": "122630.KS",
+    "KODEX 인버스": "114800.KS",
+    "KODEX 미국S&P500TR": "379800.KS",
+    "KODEX 미국나스닥100TR": "379810.KS",
+    "KODEX TDF2040액티브 적격": "448730.KS",
+    # "KODEX 코리아소버린AI" — yfinance 미등록 신규 ETF, 추후 확인 후 추가
+    "KODEX 삼성전자SK하이닉스채권혼합액티브": "486290.KS",
+    # TIGER ETF
+    "TIGER 미국S&P500": "360750.KS",
+    "TIGER 미국나스닥100": "133690.KS",
+    "TIGER 코스피200": "102110.KS",
+    # ARIRANG ETF
+    "ARIRANG 미국S&P500": "269540.KS",
+}
 
 # [변경] 이미지 처리 라이브러리는 그대로
 from PIL import Image, ImageDraw
@@ -18,6 +110,26 @@ from supabase import create_client, Client
 
 # 한국 시간대 상수 (UTC+9)
 KST = timezone(timedelta(hours=9))
+
+# ==========================================
+# 💰 노동 환산 기준 — "오늘의 알바생" 기능용
+#   - secrets.toml에 MY_HOURLY_WAGE = 25000 같이 넣으면 본인 시급으로 환산
+#   - 카드 내 expander로 세션 단위 변경도 가능 (st.session_state["_custom_wage"])
+#   - 우선순위: 세션 임시값 > secrets.toml > 2026년 최저시급
+# ==========================================
+KR_MIN_WAGE_2026 = 10_320   # 2026.1.1 ~ 2026.12.31 적용 (고용노동부 고시)
+
+def _get_active_wage() -> int:
+    """현재 적용할 시급 결정. 매 호출마다 최신 값 반영."""
+    try:
+        if "_custom_wage" in st.session_state:
+            return int(st.session_state["_custom_wage"])
+    except Exception:
+        pass
+    try:
+        return int(st.secrets.get("MY_HOURLY_WAGE", KR_MIN_WAGE_2026))
+    except Exception:
+        return KR_MIN_WAGE_2026
 
 # 2. 앱 기본 설정
 st.set_page_config(page_title="AI 주식 다이어리", page_icon="📈", layout="centered")
@@ -130,8 +242,8 @@ toss_style = """
 st.markdown(toss_style, unsafe_allow_html=True)
 # ---------------------------------------------------------
 
-# [변경] 사용할 Gemini 모델 (그대로)
-MODEL_NAME = "gemini-3-flash-preview"
+# [수정] 지정하신 최신 고속 모델로 변경
+MODEL_NAME = "gemini-3.1-flash-lite-preview"
 
 # ==========================================
 # 🔐 [변경] 비밀키 로드 — st.secrets 사용
@@ -157,8 +269,8 @@ except Exception as e:
     st.write(f"상세: `{e}`")
     st.stop()
 
-genai.configure(api_key=GEMINI_API_KEY)
-
+# [수정] 새로운 SDK의 Client 초기화
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ==========================================
 # 🛠️ [추가] 개발 모드 — 매번 로그인 안 해도 되게 세션 유지
@@ -395,19 +507,6 @@ if not st.session_state.get("supabase_session"):
 # [추가] 로그인 완료 후 사용할 Supabase 클라이언트
 supabase = get_supabase()
 
-
-@st.cache_data(ttl=3600)
-def load_krx_ticker_map(_supabase) -> dict:
-    """Supabase krx_tickers 테이블 → {종목명: ticker} 맵. TICKER_MAP으로 보정 후 반환."""
-    try:
-        rows = _supabase.table("krx_tickers").select("name, ticker").execute().data
-        result = {r["name"]: r["ticker"] for r in rows if r.get("name") and r.get("ticker")}
-        result.update(TICKER_MAP)  # 수동 보정 맵이 항상 우선
-        return result
-    except Exception:
-        return dict(TICKER_MAP)
-
-
 # 로그인 직후 Supabase user_metadata에서 멘토 설정 복구
 if "chosen_mentor" not in st.session_state:
     try:
@@ -576,10 +675,15 @@ def has_tag(selected_tags, tag_keyword):
     return any(tag_keyword in t for t in selected_tags)
 
 
-def safe_generate(model, content, fallback_msg="AI 분석 중 오류가 발생했어요."):
-    """Gemini API 호출 안전망 (기존 그대로)."""
+# [수정] 새로운 google-genai SDK 규격에 맞춘 안전망 함수
+def safe_generate(contents, config=None, fallback_msg="AI 분석 중 오류가 발생했어요."):
+    """Gemini API 호출 안전망 (google-genai SDK용)"""
     try:
-        response = model.generate_content(content)
+        response = ai_client.models.generate_content(
+            model=MODEL_NAME,
+            contents=contents,
+            config=config
+        )
         if not response.candidates or not getattr(response, 'text', None):
             return None, "⚠️ AI가 응답을 만들 수 없었어요. (안전 필터에 걸렸거나 빈 응답)"
         return response.text, None
@@ -610,14 +714,13 @@ def get_recent_journals(user_id: str, limit: int = 50):
 # ==========================================
 @st.cache_data(ttl=30)
 def get_real_inventory(user_id: str):
-    """trades 테이블에서 매수 내역을 가져와 종목별 총 수량과 평단가를 계산합니다.
-    type='dividend' 행은 재고 계산에서 제외합니다."""
+    """trades 테이블에서 매수/매도 내역을 가져와 종목별 총 수량과 평단가를 정확히 계산합니다."""
     try:
-        # 배당금 기록 제외 (type='buy' 또는 type이 없는 구 데이터만 포함)
+        # 배당금을 제외한 모든 내역 (buy, sell, 과거 null 데이터 모두 포함)
         response = (
             supabase.table("trades")
-            .select("stock_name, quantity, price, currency, type, ticker")
-            .or_("type.eq.buy,type.is.null")
+            .select("stock_name, quantity, price, currency, type")
+            .neq("type", "dividend")
             .execute()
         )
         trades = response.data
@@ -628,32 +731,40 @@ def get_real_inventory(user_id: str):
         inventory_map = {}
         for t in trades:
             name = t.get("stock_name")
-            qty = float(t.get("quantity", 0))
+            raw_qty = float(t.get("quantity", 0))
             price = float(t.get("price", 0))
             currency = t.get("currency", "KRW")
-            ticker = t.get("ticker") or ""
+            trade_type = t.get("type", "buy") # 과거 데이터(null)는 기본값 buy 처리
 
-            if not name or qty <= 0:
+            if not name or raw_qty == 0:
                 continue
 
+            # 매도(sell)인 경우 수량을 음수로 변환
+            qty = -abs(raw_qty) if trade_type == "sell" else abs(raw_qty)
+
             if name not in inventory_map:
-                inventory_map[name] = {"총수량": 0, "총금액": 0, "통화": currency, "티커": ticker}
-            elif not inventory_map[name]["티커"] and ticker:
-                inventory_map[name]["티커"] = ticker
+                inventory_map[name] = {"현재수량": 0, "총매수수량": 0, "총매수금액": 0, "통화": currency}
 
-            inventory_map[name]["총수량"] += qty
-            inventory_map[name]["총금액"] += (qty * price)
+            # 평단가 계산 로직 (매수일 때만 금액과 수량을 합산)
+            if qty > 0:
+                inventory_map[name]["총매수수량"] += qty
+                inventory_map[name]["총매수금액"] += (qty * price)
 
+            # 매도/매수 상관없이 실제 현재고 계산
+            inventory_map[name]["현재수량"] += qty
+
+        # UI 출력용 리스트 조립
         result = []
         for name, data in inventory_map.items():
-            if data["총수량"] > 0:
-                avg_price = data["총금액"] / data["총수량"]
+            # 전량 매도되어 잔고가 0 이하가 된 종목은 표시하지 않음
+            if data["현재수량"] > 0:
+                # 총 매수금액 / 총 매수수량으로 평단가 도출
+                avg_price = data["총매수금액"] / data["총매수수량"] if data["총매수수량"] > 0 else 0
                 result.append({
                     "종목": name,
-                    "수량": data["총수량"],
+                    "수량": data["현재수량"],
                     "평단가": avg_price,
-                    "통화": data["통화"],
-                    "티커": data["티커"],
+                    "통화": data["통화"]
                 })
         return result
         
@@ -664,34 +775,154 @@ def get_real_inventory(user_id: str):
 
 @st.cache_data(ttl=30)
 def get_dividend_total(user_id: str) -> dict:
-    """배당금 합계 조회. {"KRW": 원화합계, "USD": 달러합계} 형태로 반환."""
+    """배당금 합계 조회. 과거 데이터(quantity)와 신규 데이터(dividend_amount) 모두 호환."""
     try:
         response = (
             supabase.table("trades")
-            .select("quantity, currency")
+            # 과거 기록 조회를 위해 quantity도 같이 가져옵니다.
+            .select("quantity, dividend_amount, currency")
             .eq("type", "dividend")
             .execute()
         )
         totals: dict = {"KRW": 0.0, "USD": 0.0}
         for t in response.data:
             cur = t.get("currency", "KRW")
-            totals[cur] = totals.get(cur, 0.0) + float(t.get("quantity", 0))
+            # 신규 컬럼값이 있으면 우선 사용, 없으면 과거 quantity 사용
+            amount = t.get("dividend_amount")
+            if amount is None:
+                amount = float(t.get("quantity", 0))
+            
+            totals[cur] = totals.get(cur, 0.0) + float(amount)
         return totals
     except Exception:
         return {"KRW": 0.0, "USD": 0.0}
 
 
 # ==========================================
+# 🧑‍💼 "오늘의 알바생" — 배당금을 알바 노동시간으로 환산
+# ==========================================
+@st.cache_data(ttl=60)
+def get_dividend_work_stats(user_id: str, hourly_wage: int) -> dict:
+    """배당금을 알바 노동시간으로 환산한다.
+
+    Returns:
+        {
+            "total_krw_equiv":     누적 배당의 KRW 환산 총합,
+            "daily_avg_krw":       일 평균 배당(KRW),
+            "daily_work_minutes":  일 평균 알바 시간(분),
+            "total_work_minutes":  누적 알바 시간(분),
+            "days_elapsed":        첫 배당부터 오늘까지 경과 일수,
+            "has_data":            배당 기록 존재 여부,
+        }
+    """
+    empty = {
+        "total_krw_equiv": 0.0,
+        "daily_avg_krw": 0.0,
+        "daily_work_minutes": 0.0,
+        "total_work_minutes": 0.0,
+        "days_elapsed": 0,
+        "has_data": False,
+    }
+    if hourly_wage <= 0:
+        return empty
+
+    try:
+        response = (
+            supabase.table("trades")
+            .select("created_at, quantity, dividend_amount, currency")
+            .eq("type", "dividend")
+            .order("created_at", desc=False)
+            .execute()
+        )
+        rows = response.data
+        if not rows:
+            return empty
+
+        # USD 배당이 있을 때만 환율 조회 (불필요한 API 호출 방지)
+        has_usd = any(r.get("currency") == "USD" for r in rows)
+        usd_to_krw = get_usd_to_krw(_market_time_bucket()) if has_usd else 1.0
+
+        total_krw = 0.0
+        first_date_str = rows[0]["created_at"][:10]   # YYYY-MM-DD
+
+        for r in rows:
+            # 신구 데이터 호환: dividend_amount 우선, 없으면 과거 quantity
+            amount = r.get("dividend_amount")
+            if amount is None:
+                amount = float(r.get("quantity") or 0)
+            cur = r.get("currency", "KRW")
+            krw_value = float(amount) * usd_to_krw if cur == "USD" else float(amount)
+            total_krw += krw_value
+
+        if total_krw <= 0:
+            return empty
+
+        # 기간 계산 (첫 배당일 ~ 오늘, 최소 1일 보정)
+        try:
+            first_date = datetime.date.fromisoformat(first_date_str)
+            days_elapsed = max((datetime.date.today() - first_date).days + 1, 1)
+        except Exception:
+            days_elapsed = 1
+
+        daily_avg_krw = total_krw / days_elapsed
+        total_work_min = (total_krw / hourly_wage) * 60
+        daily_work_min = (daily_avg_krw / hourly_wage) * 60
+
+        return {
+            "total_krw_equiv": total_krw,
+            "daily_avg_krw": daily_avg_krw,
+            "daily_work_minutes": daily_work_min,
+            "total_work_minutes": total_work_min,
+            "days_elapsed": days_elapsed,
+            "has_data": True,
+        }
+    except Exception:
+        return empty
+
+
+def format_work_time(minutes: float) -> str:
+    """분 단위 노동시간을 사람이 읽기 좋은 형태로 변환."""
+    if minutes < 1:
+        return "1분 미만"
+    if minutes < 60:
+        return f"{int(round(minutes))}분"
+    h_total = minutes / 60
+    if h_total < 8:   # 하루 풀타임(8시간) 미만
+        h = int(h_total)
+        m = int(round(minutes - h * 60))
+        return f"{h}시간 {m}분" if m else f"{h}시간"
+    # 8시간 이상은 "일" 단위로
+    days = int(h_total // 8)
+    rem_h = int(round(h_total - days * 8))
+    if rem_h >= 8:   # 반올림 보정
+        days += 1
+        rem_h = 0
+    return f"{days}일 {rem_h}시간 근무" if rem_h else f"{days}일 근무"
+
+
+def get_daily_meal(daily_avg_krw: float) -> dict:
+    """일 평균 배당금을 보편적인 식사/간식 메뉴로 변환."""
+    if daily_avg_krw < 500:
+        return {"icon": "☕", "menu": "자판기 커피 한 잔", "desc": "작지만 소중한 시작! 식후 커피 한 잔의 여유를 줍니다."}
+    elif daily_avg_krw < 1500:
+        return {"icon": "🍙", "menu": "편의점 삼각김밥", "desc": "바쁠 때 출출함을 달래주는 작지만 확실한 간식입니다."}
+    elif daily_avg_krw < 4000:
+        return {"icon": "🍜", "menu": "컵라면과 바나나맛 우유", "desc": "누구나 좋아하는 최고의 편의점 소울 조합!"}
+    elif daily_avg_krw < 9000:
+        return {"icon": "🍲", "menu": "든든한 국밥 한 그릇", "desc": "한국인의 소울푸드! 든든한 한 끼 식사가 해결됩니다."}
+    elif daily_avg_krw < 15000:
+        return {"icon": "🍱", "menu": "직장인 점심 특선", "desc": "오늘 점심값은 주식이 냈습니다. 식후 아메리카노까지 가능!"}
+    elif daily_avg_krw < 25000:
+        return {"icon": "🍗", "menu": "치킨 한 마리", "desc": "오늘 저녁은 치킨! 배당금이 즐거운 야식을 쏩니다."}
+    else:
+        return {"icon": "🥩", "menu": "프리미엄 소고기 외식", "desc": "축하합니다! 자산이 근사한 외식을 대접하는 수준입니다."}
+
+
+# ==========================================
 # 🏠 메인 화면
 # ==========================================
-st.markdown("""
-<div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
-    <h1 style="font-size: 2.3rem; font-weight: 800; color: #191F28; margin-bottom: 10px;">
-        <span style="color: #3182F6;">📈 AI</span> 주식 페이스메이커
-    </h1>
-    <p style="color: #8B95A1; font-size: 1.1rem; font-weight: 500;">흔들리지 않는 장기 투자의 시작</p>
-</div>
-""", unsafe_allow_html=True)
+st.title("📈 AI 주식 페이스메이커")
+
 # [추가] 사이드바 상단에 로그인 정보 + 로그아웃 버튼
 st.sidebar.markdown(f"👤 **{st.session_state.get('user_email', '로그인됨')}**")
 if DEV_MODE:
@@ -798,155 +1029,97 @@ with tab1:
         my_portfolio = get_real_inventory(st.session_state["user_id"])
 
         if not my_portfolio:
-            st.info("아직 텅 비어있네요! 💸 첫 매수 기록을 남겨보세요.")
+            st.info("아직 텅 비어있네요! 💸 이번 달은 삼성전자나 Alphabet 같은 든든한 자산을 모아 첫 기록을 남겨보는 건 어떨까요?")
         else:
-            krx_map = load_krx_ticker_map(supabase)
-            # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 KRX 맵 폴백)
+            # 필요한 티커를 모아 한 번에 일괄 조회
             all_tickers = tuple(
-                t for t in (
-                    item.get("티커") or resolve_ticker(item["종목"], krx_map=krx_map)
-                    for item in my_portfolio
-                ) if t
+                TICKER_MAP[item["종목"]]
+                for item in my_portfolio
+                if item["종목"] in TICKER_MAP
             )
             _tb = _market_time_bucket()
             bulk_prices = get_realtime_prices_bulk(all_tickers, time_bucket=_tb) if all_tickers else {}
             usd_rate = get_usd_to_krw(time_bucket=_tb)
 
-            # ── 종목별 평가금액 + 투자원금 계산 ──────────────────────
+            # ── 총 평가 자산 계산 ──────────────────────────────────────
             total_krw = 0.0
-            cost_krw = 0.0
             all_priced = True
-            item_values = {}  # 종목별 평가금액(KRW 환산) — 비중 계산용
             for _item in my_portfolio:
-                _ticker = _item.get("티커") or resolve_ticker(_item["종목"], krx_map=krx_map)
+                _ticker = TICKER_MAP.get(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
-                _qty = _item["수량"]
-                _avg = _item["평단가"]
-                _is_krw = _item["통화"] == "KRW"
-                if _price and _qty > 0:
-                    _val_krw = _price * _qty if _is_krw else _price * _qty * usd_rate
-                    total_krw += _val_krw
-                    item_values[_item["종목"]] = _val_krw
+                if _price and _item["수량"] > 0:
+                    if _item["통화"] == "KRW":
+                        total_krw += _price * _item["수량"]
+                    else:
+                        total_krw += _price * _item["수량"] * usd_rate
                 else:
                     all_priced = False
-                    item_values[_item["종목"]] = 0.0
-                if _avg > 0 and _qty > 0:
-                    cost_krw += (_avg * _qty) if _is_krw else (_avg * _qty * usd_rate)
 
-            # ── 정렬 선택 ─────────────────────────────────────────────
-            sort_key = st.radio(
-                "정렬",
-                ["평가금액순", "수익률순", "이름순"],
-                horizontal=True,
-                label_visibility="collapsed",
-            )
-            if sort_key == "평가금액순":
-                my_portfolio = sorted(my_portfolio, key=lambda x: item_values.get(x["종목"], 0), reverse=True)
-            elif sort_key == "수익률순":
-                def _rate(item):
-                    ticker = item.get("티커") or resolve_ticker(item["종목"], krx_map=krx_map)
-                    cp = bulk_prices.get(ticker) if ticker else None
-                    if cp and item["평단가"] > 0:
-                        return (cp - item["평단가"]) / item["평단가"]
-                    return -999
-                my_portfolio = sorted(my_portfolio, key=_rate, reverse=True)
-            else:
-                my_portfolio = sorted(my_portfolio, key=lambda x: x["종목"])
-
-            # ── 총 평가 자산 카드 ──────────────────────────────────────
             if total_krw > 0:
                 _note = "" if all_priced else " <span style='font-size:0.7em;opacity:0.75;'>(일부 종목 제외)</span>"
-                total_profit_krw = total_krw - cost_krw
-                total_profit_rate = (total_profit_krw / cost_krw * 100) if cost_krw > 0 else 0
-                profit_sign = "+" if total_profit_krw >= 0 else ""
-                profit_color = "rgba(255,100,100,0.9)" if total_profit_krw >= 0 else "rgba(120,180,255,0.9)"
-                cost_visible = cost_krw > 0
                 st.markdown(f"""
                 <div style="background:linear-gradient(135deg,#3182F6 0%,#1a6fd8 100%);
                             border-radius:16px; padding:20px 24px; margin-bottom:16px; color:white;">
                     <div style="font-size:0.82em; opacity:0.85;">총 평가 자산{_note}</div>
                     <div style="font-size:1.65em; font-weight:800; margin:4px 0; letter-spacing:-0.5px;">
                         {total_krw:,.0f}원</div>
-                    {'<div style="font-size:0.88em; margin-bottom:4px; color:' + profit_color + ';">' +
-                      profit_sign + f'{total_profit_krw:,.0f}원 ({profit_sign}{total_profit_rate:.2f}%)</div>'
-                      if cost_visible else ''}
                     <div style="font-size:0.78em; opacity:0.7;">환율 적용: 1$ = {usd_rate:,.0f}원</div>
                 </div>""", unsafe_allow_html=True)
 
-            # ── 종목 카드 목록 ────────────────────────────────────────
             rows_html = ""
             for item in my_portfolio:
-                ticker = item.get("티커") or resolve_ticker(item["종목"], krx_map=krx_map)
+                ticker = TICKER_MAP.get(item["종목"])
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
-                is_krw = item["통화"] == "KRW"
-                currency = "원" if is_krw else "$"
-                flag = "🇰🇷" if is_krw else "🇺🇸"
+                currency = "원" if item["통화"] == "KRW" else "$"
 
-                # 평가금액 (KRW 환산)
-                val_krw = item_values.get(item["종목"], 0.0)
-                weight_pct = (val_krw / total_krw * 100) if total_krw > 0 else 0
-
-                # 현재가 표시
+                # 1. 오른쪽 상단: 현재가 또는 평단가(지연됨) 폴백
                 if has_valid_price:
-                    price_str = f"{current_price:,.0f}" if is_krw else f"{current_price:,.2f}"
+                    price_str = f"{current_price:,.0f}" if item["통화"] == "KRW" else f"{current_price:,.2f}"
                     price_html = f'<span style="font-weight:700; font-size:1.05em; color:#191F28;">{price_str}{currency}</span>'
                 elif item["평단가"] > 0:
-                    avg_str = f"{item['평단가']:,.0f}" if is_krw else f"{item['평단가']:,.2f}"
+                    avg_str = f"{item['평단가']:,.0f}" if item["통화"] == "KRW" else f"{item['평단가']:,.2f}"
                     price_html = (f'<span style="font-weight:700; font-size:1.05em; color:#8B95A1;">'
                                   f'{avg_str}{currency}</span>'
                                   f'<span style="font-size:0.72em; color:#B0B8C1;"> (지연됨 📡)</span>')
                 else:
                     price_html = '<span style="font-weight:600; font-size:0.9em; color:#8B95A1;">수신 지연 📡</span>'
 
-                # 수익률 + 수익금
+                # 2. 오른쪽 하단: 수익률 또는 상태 표시
                 if has_valid_price and item["평단가"] > 0:
                     profit_rate = ((current_price - item["평단가"]) / item["평단가"]) * 100
-                    profit_amt = (current_price - item["평단가"]) * item["수량"]
-                    profit_amt_krw = profit_amt if is_krw else profit_amt * usd_rate
-                    sign = "+" if profit_rate >= 0 else ""
-                    rate_color = "#F04452" if profit_rate > 0 else ("#3182F6" if profit_rate < 0 else "#8B95A1")
-                    amt_str = f"{profit_amt_krw:+,.0f}원"
-                    rate_html = (f'<span style="color:{rate_color}; font-weight:600; font-size:0.85em;">'
-                                 f'{sign}{profit_rate:.2f}% ({amt_str})</span>')
+                    sign = "+" if profit_rate > 0 else ""
+                    # 토스 스타일 증권 색상: 빨강(상승), 파랑(하락), 회색(보합)
+                    if profit_rate > 0:
+                        rate_color = "#F04452"
+                    elif profit_rate < 0:
+                        rate_color = "#3182F6"
+                    else:
+                        rate_color = "#8B95A1"
+                    rate_html = f'<span style="color:{rate_color}; font-weight:600; font-size:0.85em;">{sign}{profit_rate:.2f}%</span>'
                 elif not ticker:
-                    rate_html = '<span style="color:#B0B8C1; font-size:0.8em;">실시간 가격을 불러올 수 없는 종목입니다.</span>'
+                    rate_html = '<span style="color:#B0B8C1; font-size:0.8em;">티커 미등록</span>'
                 else:
                     rate_html = '<span style="color:#B0B8C1; font-size:0.8em;">단가 미기록</span>'
 
-                # 평가금액 문자열
-                if val_krw > 0:
-                    eval_html = f'<span style="font-size:0.8em; color:#8B95A1;">평가 {val_krw:,.0f}원</span>'
-                else:
-                    eval_html = ''
-
-                # 비중 바
-                bar_html = (
-                    f'<div style="margin-top:8px; background:#F2F4F6; border-radius:4px; height:3px;">'
-                    f'<div style="width:{weight_pct:.1f}%; background:#3182F6; height:3px; border-radius:4px;"></div>'
-                    f'</div>'
-                ) if total_krw > 0 else ''
-
+                # 3. 모바일 앱 스타일의 하얀색 카드(Card) UI 렌더링
                 rows_html += f"""
-                <div style="padding:16px; border-radius:16px; margin-bottom:12px;
+                <div style="display:flex; justify-content:space-between; align-items:center;
+                            padding:16px; border-radius:16px; margin-bottom:12px;
                             background-color:#FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
                             border: 1px solid #F2F4F6;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                        <div style="line-height:1.4;">
-                            <div style="font-weight:700; font-size:1.05em; color:#333D4B;">
-                                {flag} {item['종목']}</div>
-                            <div style="color:#8B95A1; font-size:0.85em;">{item['수량']:,.0f}주 보유</div>
-                        </div>
-                        <div style="text-align:right; line-height:1.4;">
-                            <div>{price_html}</div>
-                            <div>{eval_html}</div>
-                            <div>{rate_html}</div>
-                        </div>
+                    <div style="line-height:1.4;">
+                        <div style="font-weight:700; font-size:1.05em; color:#333D4B;">{item['종목']}</div>
+                        <div style="color:#8B95A1; font-size:0.85em;">{item['수량']:,.0f}주 보유</div>
                     </div>
-                    {bar_html}
+                    <div style="text-align:right; line-height:1.4;">
+                        <div>{price_html}</div>
+                        <div>{rate_html}</div>
+                    </div>
                 </div>"""
 
             st.markdown(rows_html, unsafe_allow_html=True)
+            st.caption("💡 '티커 미등록' 종목은 app.py의 TICKER_MAP에 야후파이낸스 코드를 추가하면 실시간 연동됩니다.")
 
             # ── 누적 배당금 요약 ─────────────────────────────────────
             div_totals = get_dividend_total(st.session_state["user_id"])
@@ -963,6 +1136,114 @@ with tab1:
                     unsafe_allow_html=True
                 )
 
+            # ============================================================
+            # 🧑‍💼 오늘의 알바생 — 배당금을 노동시간으로 환산
+            # ============================================================
+            _active_wage = _get_active_wage()
+            work_stats = get_dividend_work_stats(
+                st.session_state["user_id"],
+                _active_wage,
+            )
+
+            if not work_stats["has_data"]:
+                # 빈 상태: 첫 배당 들어오기 전
+                st.markdown(
+                    '<div style="background: linear-gradient(135deg, #F1F5F915, #E2E8F015); '
+                    'border:1px dashed #CBD5E1; border-radius:14px; padding:14px 18px; margin-top:10px;">'
+                    '<div style="font-size:0.85em; color:#64748B;">🧑‍💼 오늘의 알바생</div>'
+                    '<div style="font-size:0.95em; margin-top:4px; color:#94A3B8;">'
+                    '아직 잠자고 있어요 💤  첫 배당이 들어오면 일을 시작합니다.'
+                    '</div></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                daily_min = work_stats["daily_work_minutes"]
+                total_min = work_stats["total_work_minutes"]
+                daily_krw = work_stats["daily_avg_krw"]
+                elapsed   = work_stats["days_elapsed"]
+
+                # 일 평균 워딩 — 작은 숫자에도 의미 주기
+                if daily_min < 3:
+                    daily_phrase = "잠깐 심부름 다녀온 정도"
+                    emoji = "🚶"
+                elif daily_min < 15:
+                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 알바 완료"
+                    emoji = "🧑‍🔧"
+                elif daily_min < 60:
+                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 알바 뛰어줌"
+                    emoji = "💼"
+                elif daily_min < 240:   # 4시간 미만
+                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 파트타임 근무"
+                    emoji = "🏃"
+                elif daily_min < 480:   # 8시간 미만
+                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 풀타임에 근접"
+                    emoji = "🔥"
+                else:
+                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 정직원급 근무"
+                    emoji = "🚀"
+
+                wage_note = (
+                    f"본인 시급 {_active_wage:,}원 기준"
+                    if _active_wage != KR_MIN_WAGE_2026
+                    else f"2026년 최저시급 {KR_MIN_WAGE_2026:,}원 기준"
+                )
+
+                st.markdown(
+                    f'<div style="background: linear-gradient(135deg, #EEF2FF, #FAF5FF); '
+                    f'border-radius:14px; padding:16px 20px; margin-top:10px;">'
+                    f'<div style="font-size:0.85em; color:#6366F1; font-weight:600;">'
+                    f'{emoji} 오늘의 알바생</div>'
+                    f'<div style="font-size:1.08em; margin-top:6px; color:#1E293B; line-height:1.5;">'
+                    f'내 주식이 매일 평균 {daily_phrase}'
+                    f'</div>'
+                    f'<div style="font-size:0.78em; color:#64748B; margin-top:8px;">'
+                    f'일 평균 {daily_krw:,.0f}원  ·  누적 노동시간 '
+                    f'<b>{format_work_time(total_min)}</b>  ·  {elapsed}일째 출근 중'
+                    f'</div>'
+                    f'<div style="font-size:0.72em; color:#94A3B8; margin-top:4px;">'
+                    f'{wage_note}'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+                # 본인 시급 설정 (선택)
+                with st.expander("⚙️ 내 시급으로 환산하기", expanded=False):
+                    st.caption(
+                        "본인의 실제 시급을 기준으로 환산하면 임팩트가 훨씬 커집니다. "
+                        "영구 저장하려면 `.streamlit/secrets.toml`에 "
+                        "`MY_HOURLY_WAGE = 25000` 같이 추가하세요."
+                    )
+                    new_wage = st.number_input(
+                        "이번 세션에서만 적용할 시급(원)",
+                        min_value=1_000,
+                        max_value=500_000,
+                        value=_active_wage,
+                        step=500,
+                        key="custom_wage_input",
+                    )
+                    if st.button("이 세션에 적용", key="apply_custom_wage"):
+                        get_dividend_work_stats.clear()
+                        st.session_state["_custom_wage"] = new_wage
+                        st.rerun()
+
+                # ── 자산이 차린 식탁 ──────────────────────────────────
+                meal = get_daily_meal(daily_krw)
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg,#ffffff,#f8f9fa); '
+                    f'border-radius:14px; padding:16px 20px; margin-top:10px; border:1px solid #e9ecef;">'
+                    f'<div style="font-size:0.85em; color:#868e96; font-weight:600;">🍽️ 오늘의 자산 식탁</div>'
+                    f'<div style="text-align:center; margin:10px 0;">'
+                    f'<div style="font-size:2.4rem;">{meal["icon"]}</div>'
+                    f'<div style="font-size:1.05em; font-weight:700; color:#212529; margin-top:6px;">{meal["menu"]}</div>'
+                    f'<div style="font-size:0.85em; color:#495057; margin-top:5px;">{meal["desc"]}</div>'
+                    f'</div>'
+                    f'<div style="border-top:1px dashed #dee2e6; padding-top:8px; text-align:center; '
+                    f'font-size:0.82em; color:#868e96;">'
+                    f'일 평균 배당: <b style="color:#339af0;">{daily_krw:,.0f}원</b>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
         # ── 배당금 직접 기록 폼 ──────────────────────────────────────
         with st.expander("🍯 배당금 직접 기록하기", expanded=False):
             with st.form("dividend_form", clear_on_submit=True):
@@ -977,12 +1258,13 @@ with tab1:
                 if div_submit and div_stock and div_amount > 0:
                     try:
                         supabase.table("trades").insert({
-                            "user_id":    st.session_state["user_id"],
-                            "stock_name": div_stock.strip(),
-                            "quantity":   div_amount,
-                            "price":      1.0,
-                            "currency":   div_currency,
-                            "type":       "dividend",
+                            "user_id":         st.session_state["user_id"],
+                            "stock_name":      div_stock.strip(),
+                            "quantity":        0.0, # 더 이상 배당금을 수량에 욱여넣지 않음
+                            "price":           0.0, # 더미 값 제거
+                            "currency":        div_currency,
+                            "type":            "dividend",
+                            "dividend_amount": div_amount # 신규 컬럼에 명확히 적재
                         }).execute()
                         get_dividend_total.clear()
                         _sym = "원" if div_currency == "KRW" else "$"
@@ -1110,10 +1392,14 @@ with tab1:
 
 위 대화 흐름에 자연스럽게 이어지도록, 사용자의 가장 최근 메시지에 답해주세요."""
 
-                model = genai.GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
+                # [변경 후]
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction
+                )
+                
                 response_text, err = safe_generate(
-                    model,
-                    user_input.strip(),
+                    contents=user_input.strip(),
+                    config=config,
                     fallback_msg="답변 생성 중 오류가 발생했어요."
                 )
 
@@ -1157,37 +1443,25 @@ with tab1:
 
             if st.button("✅ 가림막 설정 완료 및 정보 추출"):
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
-                    # ── [수정] 구형 SDK 호환을 위해 TypedDict 구조 선언 ──
-                    import typing
-
-                    class StockItem(typing.TypedDict):
-                        stock_name: str
-                        quantity: float
-                        ticker_hint: str
-
-                    class TradeExtraction(typing.TypedDict):
-                        trades: list[StockItem]
-
-                    # Structured Outputs 설정 적용
-                    extract_model = genai.GenerativeModel(
-                        MODEL_NAME,
-                        generation_config=genai.GenerationConfig(
-                            response_mime_type="application/json",
-                            response_schema=TradeExtraction,  # 👈 딕셔너리 대신 구조화된 스키마 대입
-                        ),
+                    # [변경 후]
+                    config = types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema={
+                            "type": "OBJECT",
+                            "additionalProperties": {"type": "NUMBER"},
+                        }
                     )
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
-                        "보유 중인 모든 종목명과 수량을 추출해서 trades 리스트에 빠짐없이 담아줘. "
-                        "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해. "
-                        "ticker_hint는 야후파이낸스 티커를 넣어줘: "
-                        "KODEX·TIGER·ARIRANG ETF 및 한국 개별주는 빈 문자열(\"\")로 두고, "
-                        "미국 주식만 AAPL·GOOGL 형식 티커를 채워줘."
+                        "보유 중인 모든 종목명과 수량을 추출해줘. "
+                        "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해."
                     )
 
-                    text, err = safe_generate(extract_model, [extract_prompt, image],
-                                              fallback_msg="이미지 분석 중 오류가 발생했어요.")
-                
+                    text, err = safe_generate(
+                        contents=[extract_prompt, image], 
+                        config=config,
+                        fallback_msg="이미지 분석 중 오류가 발생했어요."
+                    )
 
                     if err:
                         st.error(err)
@@ -1225,20 +1499,9 @@ with tab1:
         # ── 1) diff 계산 (폼 바깥에서 한 번만 실행) ──────────────────────
         try:
             ai_text = st.session_state.get('temp_extracted_data', '{}')
-            parsed_json = json.loads(ai_text.strip())
-            
-            # [수정] List[Dict] 형태의 AI 응답을 기존의 {종목명: 수량} 딕셔너리로 역변환
-            extracted_dict = {}
-            if isinstance(parsed_json, dict) and "trades" in parsed_json:
-                for item in parsed_json["trades"]:
-                    name = item.get("stock_name")
-                    qty = item.get("quantity")
-                    if name and qty is not None:
-                        extracted_dict[name.strip()] = float(qty)
-            elif isinstance(parsed_json, dict):
-                # 예외 방어용 대피선
-                extracted_dict = {k: float(v) for k, v in parsed_json.items() if v is not None}
-                        
+            # Structured Outputs 덕분에 순수 JSON이 보장됨 — 정규표현식 불필요
+            extracted_dict = json.loads(ai_text.strip())
+            extracted_dict = {k: float(v) for k, v in extracted_dict.items()}
         except Exception as e:
             st.error(f"AI 응답 파싱 실패 ({e}).")
             extracted_dict = {}
@@ -1405,7 +1668,8 @@ with tab1:
                   "extracted_trades": [
                     {{
                       "stock_name": "삼성전자",
-                      "quantity": 10
+                      "quantity": 10,
+                      "type": "buy" // 매수는 "buy", 매도는 "sell" 로 정확히 기재하세요.
                     }}
                   ]
                 }}
@@ -1424,17 +1688,20 @@ with tab1:
                 * 주의사항 3: extracted_trades의 각 항목에는 stock_name과 quantity만 포함하면 됩니다.
                 """
 
-                model = genai.GenerativeModel(
-                    MODEL_NAME,
+                # [변경 후]
+                config = types.GenerateContentConfig(
                     system_instruction=system_instruction,
-                    generation_config={"response_mime_type": "application/json"}
+                    response_mime_type="application/json"
                 )
 
                 tag_text = " ".join(selected_tags) if selected_tags else ""
                 final_prompt = f"태그: {tag_text}\n\n사용자가 오늘 다음 종목들을 매수/확인했습니다:\n{all_data_str}\n\n이 내역을 바탕으로 전체적인 투자 평과 멘탈 관리 조언을 해줘."
 
-                final_text, err = safe_generate(model, final_prompt,
-                                                fallback_msg="최종 피드백 생성 중 오류가 발생했어요.")
+                final_text, err = safe_generate(
+                    contents=final_prompt,
+                    config=config,
+                    fallback_msg="최종 피드백 생성 중 오류가 발생했어요."
+                )
 
                 if err:
                     st.session_state['final_error'] = err
@@ -1458,7 +1725,7 @@ with tab1:
                             for trade in extracted_trades:
                                 raw_name   = trade["stock_name"]
                                 normalized = " ".join(raw_name.split())
-                                ticker     = resolve_ticker(normalized, trade.get("ticker_hint") or "", krx_map=load_krx_ticker_map(supabase))
+                                ticker     = TICKER_MAP.get(normalized) or TICKER_MAP.get(raw_name)
                                 trade["_normalized_name"] = normalized
                                 trade["_ticker"]          = ticker
                                 if ticker:
@@ -1475,13 +1742,14 @@ with tab1:
                                     currency   = "KRW" if ticker.endswith(".KS") else "USD"
                                 else:
                                     real_price = 0.0
-                                    currency   = "KRW"  # 티커 미확인 → 국내로 간주
+                                    currency   = "KRW"
+                                
                                 trades_to_insert.append({
                                     "stock_name": trade["_normalized_name"],
-                                    "quantity":   trade["quantity"],
+                                    "quantity":   abs(trade["quantity"]), # 수량은 무조건 절대값으로 DB 저장
                                     "price":      real_price,
                                     "currency":   currency,
-                                    "ticker":     ticker or "",
+                                    "type":       trade.get("type", "buy") # AI가 판별한 buy 또는 sell 저장
                                 })
 
                         # ==========================================
@@ -1597,158 +1865,6 @@ with tab2:
 #   대신 사용자가 본인 데이터를 언제든 추출/이전 가능하게 함
 with tab3:
     st.header("⚙️ 설정 및 데이터 관리")
-
-    # ── 관리자 전용: KRX 티커 목록 업로드 ───────────────────────
-    _admin_email = st.secrets.get("ADMIN_EMAIL", "")
-    _user_email  = st.session_state.get("user_email", "")
-    if _admin_email and _user_email == _admin_email:
-        st.markdown("### 🔧 [관리자] KRX 티커 목록 업데이트")
-        st.caption(
-            "KRX 사이트 → 시장정보 → ETF → 전체종목 → 다운로드(Excel)한 파일을 올려주세요. "
-            "업로드 즉시 모든 사용자에게 적용됩니다."
-        )
-        uploaded = st.file_uploader("KRX ETF 목록 Excel", type=["xlsx", "xls", "csv"], key="krx_upload")
-        if uploaded:
-            try:
-                import pandas as pd
-                if uploaded.name.endswith(".csv"):
-                    df = pd.read_csv(uploaded, dtype=str)
-                else:
-                    df = pd.read_excel(uploaded, dtype=str)
-
-                # 약명 우선(MTS 표시명) → 정식명 순으로 탐색
-                name_col = (
-                    next((c for c in df.columns if "종목약명" in c), None)
-                    or next((c for c in df.columns if "종목명" in c or c == "Name"), None)
-                )
-                code_col = next((c for c in df.columns if "단축코드" in c or "종목코드" in c or c in ("Code", "Symbol")), None)
-
-                if not name_col or not code_col:
-                    st.error(f"컬럼을 찾지 못했습니다. 파일 컬럼: {list(df.columns)}")
-                else:
-                    rows = []
-                    for _, row in df.iterrows():
-                        name = str(row[name_col]).strip()
-                        code = str(row[code_col]).strip().zfill(6)
-                        if name and code and name != "nan":
-                            rows.append({"name": name, "ticker": f"{code}.KS"})
-
-                    if rows:
-                        supabase.table("krx_tickers").upsert(rows, on_conflict="name").execute()
-                        load_krx_ticker_map.clear()
-                        st.success(f"✅ {len(rows)}개 종목 업데이트 완료!")
-                    else:
-                        st.warning("파싱된 데이터가 없습니다. 파일을 확인해주세요.")
-            except Exception as e:
-                st.error(f"업로드 실패: {e}")
-
-        st.markdown("---")
-
-        # ── 관리자 전용: 소급 단가 수정 ──────────────────────────
-        st.markdown("### 🔄 [관리자] 소급 단가 수정")
-        st.caption(
-            "price=0으로 저장된 매수 기록에 야후파이낸스 거래일 종가를 조회해 소급 적용합니다. "
-            "티커를 찾을 수 없는 종목은 건너뜁니다."
-        )
-        if st.button("🔄 소급 단가 수정 실행", type="primary", key="retro_price_btn"):
-            import yfinance as _yf
-            with st.spinner("소급 수정 중... 잠시 기다려주세요."):
-                try:
-                    retro_resp = (
-                        supabase.table("trades")
-                        .select("id, stock_name, ticker, created_at, currency")
-                        .or_("type.eq.buy,type.is.null")
-                        .eq("price", 0)
-                        .execute()
-                    )
-                    retro_trades = retro_resp.data or []
-
-                    if not retro_trades:
-                        st.info("소급 수정할 기록이 없습니다. (price=0인 매수 기록 없음)")
-                    else:
-                        _krx_map = load_krx_ticker_map(supabase)
-                        updated, skipped, failed = 0, 0, 0
-                        prog = st.progress(0)
-                        status = st.empty()
-
-                        # 티커별로 묶기 (같은 티커 → yfinance 1회 호출로 처리)
-                        ticker_groups: dict[str, list[dict]] = {}
-                        no_ticker_trades = []
-                        for trade in retro_trades:
-                            ticker = trade.get("ticker") or resolve_ticker(trade["stock_name"], krx_map=_krx_map)
-                            if not ticker:
-                                no_ticker_trades.append(trade)
-                            else:
-                                trade["_ticker"] = ticker
-                                ticker_groups.setdefault(ticker, []).append(trade)
-
-                        skipped = len(no_ticker_trades)
-                        unique_tickers = list(ticker_groups.keys())
-                        total_tickers = len(unique_tickers)
-
-                        for t_idx, ticker in enumerate(unique_tickers):
-                            prog.progress((t_idx + 1) / max(total_tickers, 1))
-                            status.text(f"티커 조회 중: {ticker} ({t_idx+1}/{total_tickers})")
-                            trades_for_ticker = ticker_groups[ticker]
-
-                            try:
-                                dates = [
-                                    datetime.date.fromisoformat(t["created_at"][:10])
-                                    for t in trades_for_ticker
-                                ]
-                                fetch_start = min(dates)
-                                fetch_end   = max(dates) + datetime.timedelta(days=7)
-                                hist = _yf.Ticker(ticker).history(
-                                    start=fetch_start.isoformat(),
-                                    end=fetch_end.isoformat(),
-                                    auto_adjust=True,
-                                )
-                                if hist.empty:
-                                    failed += len(trades_for_ticker)
-                                    continue
-
-                                # 날짜 인덱스를 date 객체로 변환해 룩업 테이블 생성
-                                hist.index = hist.index.date
-                                price_cache: dict[datetime.date, float] = {}
-                                for d in sorted(hist.index):
-                                    price_cache[d] = float(hist.loc[d, "Close"])
-
-                                for trade in trades_for_ticker:
-                                    trade_date = datetime.date.fromisoformat(trade["created_at"][:10])
-                                    # 거래일이 휴장일이면 이후 첫 영업일 가격 사용
-                                    price = None
-                                    for offset in range(7):
-                                        lookup = trade_date + datetime.timedelta(days=offset)
-                                        if lookup in price_cache:
-                                            price = price_cache[lookup]
-                                            break
-
-                                    if price is None or math.isnan(price) or price <= 0:
-                                        failed += 1
-                                        continue
-
-                                    supabase.table("trades").update({
-                                        "price":  price,
-                                        "ticker": ticker,
-                                    }).eq("id", trade["id"]).execute()
-                                    updated += 1
-
-                            except Exception:
-                                failed += len(trades_for_ticker)
-
-                        prog.empty()
-                        status.empty()
-                        get_real_inventory.clear()
-                        st.success(
-                            f"✅ 완료!  수정: {updated}건 · 티커 미확인: {skipped}건 · "
-                            f"가격 조회 실패: {failed}건  "
-                            f"(야후파이낸스 호출 횟수: {total_tickers}회)"
-                        )
-
-                except Exception as e:
-                    st.error(f"소급 수정 실패: {e}")
-
-        st.markdown("---")
 
     # 비밀번호 변경 (로그인 상태)
     st.markdown("### 🔑 비밀번호 변경")
