@@ -28,20 +28,22 @@ def to_kst_str(iso_ts: str) -> str:
         return iso_ts
 
 
-def calculate_scores(supabase):
+def calculate_scores(supabase, user_id: str = ""):
     """최근 30일 일기를 기반으로 투자 능력치 점수를 계산."""
     thirty_days_ago = (
         datetime.datetime.now(timezone.utc) - datetime.timedelta(days=30)
     ).isoformat()
 
     try:
-        response = (
+        query = (
             supabase.table("journals")
             .select("created_at, tags")
             .gte("created_at", thirty_days_ago)
             .order("created_at", desc=True)
-            .execute()
         )
+        if user_id:
+            query = query.eq("user_id", user_id)
+        response = query.execute()
         rows = response.data
     except Exception as e:
         st.sidebar.warning(f"점수 조회 실패: {e}")
@@ -90,7 +92,7 @@ def has_tag(tags: list, keyword: str) -> bool:
     return any(keyword in t for t in tags)
 
 
-def get_past_context(tags, supabase):
+def get_past_context(tags, supabase, user_id: str = ""):
     """현재 선택된 태그 중 가장 중요한 감정 태그를 찾아 과거 일기를 소환."""
     if not tags:
         return ""
@@ -107,14 +109,16 @@ def get_past_context(tags, supabase):
         core_tag = tags[0]
 
     try:
-        response = (
+        query = (
             supabase.table("journals")
             .select("created_at, content")
             .like("tags", f"%{core_tag}%")
             .order("created_at", desc=True)
             .limit(3)
-            .execute()
         )
+        if user_id:
+            query = query.eq("user_id", user_id)
+        response = query.execute()
         rows = response.data
     except Exception:
         rows = []
@@ -136,6 +140,7 @@ def get_recent_journals(user_id: str, _supabase, limit: int = 50):
         response = (
             _supabase.table("journals")
             .select("id, created_at, tags, content, ai_feedback")
+            .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -153,6 +158,7 @@ def get_real_inventory(user_id: str, _supabase):
         response = (
             _supabase.table("trades")
             .select("stock_name, quantity, price, currency, type")
+            .eq("user_id", user_id)
             .neq("type", "dividend")
             .execute()
         )
@@ -206,6 +212,7 @@ def get_dividend_total(user_id: str, _supabase) -> dict:
         response = (
             _supabase.table("trades")
             .select("quantity, dividend_amount, currency")
+            .eq("user_id", user_id)
             .eq("type", "dividend")
             .execute()
         )

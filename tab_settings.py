@@ -37,9 +37,11 @@ def render_settings_tab(supabase):
     st.markdown("<p style='color: #8B95A1; font-size: 0.88em; margin-bottom: 12px;'>사용자가 기록한 모든 주식 일기와 AI 피드백을 JSON 파일로 즉시 다운로드하여 소장할 수 있습니다.</p>", unsafe_allow_html=True)
 
     try:
+        _uid = st.session_state.get("user_id")
         all_rows = (
             supabase.table("journals")
             .select("created_at, tags, content, ai_feedback")
+            .eq("user_id", _uid)
             .order("created_at", desc=True)
             .execute()
             .data
@@ -96,7 +98,9 @@ def render_settings_tab(supabase):
                     supabase.table("trades").delete().eq("user_id", _uid).execute()
                     get_recent_journals.clear()
                     get_real_inventory.clear()
-                    banner("모든 기록이 영구적으로 안전하게 삭제되었습니다. 초기 화면으로 이동합니다.", type="success")
+                    # 세션도 완전히 비워서 로그아웃 상태로 전환
+                    for key in list(st.session_state.keys()):
+                        del st.session_state[key]
                     st.rerun()
                 except Exception as e:
                     banner(f"삭제에 실패했습니다: {e}", type="error")
