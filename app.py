@@ -1174,20 +1174,27 @@ with tab1:
 
             if st.button("✅ 가림막 설정 완료 및 정보 추출"):
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
-                    # Structured Outputs — {"종목명": 수량} 형태의 JSON만 강제 반환
+                    # ── [수정] 구형 SDK 호환을 위해 TypedDict 구조 선언 ──
+                    import typing
+
+                    class StockItem(typing.TypedDict):
+                        stock_name: str
+                        quantity: float
+
+                    class TradeExtraction(typing.TypedDict):
+                        trades: list[StockItem]
+
+                    # Structured Outputs 설정 적용
                     extract_model = genai.GenerativeModel(
                         MODEL_NAME,
                         generation_config=genai.GenerationConfig(
                             response_mime_type="application/json",
-                            response_schema={
-                                "type": "object",
-                                "additionalProperties": {"type": "number"},
-                            },
+                            response_schema=TradeExtraction,  # 👈 딕셔너리 대신 구조화된 스키마 대입
                         ),
                     )
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
-                        "보유 중인 모든 종목명과 수량을 추출해줘. "
+                        "보유 중인 모든 종목명과 수량을 추출해서 trades 리스트에 빠짐없이 담아줘. "
                         "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해."
                     )
 
@@ -1233,11 +1240,17 @@ with tab1:
             ai_text = st.session_state.get('temp_extracted_data', '{}')
             parsed_json = json.loads(ai_text.strip())
             
+            # [수정] List[Dict] 형태의 AI 응답을 기존의 {종목명: 수량} 딕셔너리로 역변환
             extracted_dict = {}
-            if "trades" in parsed_json:
+            if isinstance(parsed_json, dict) and "trades" in parsed_json:
                 for item in parsed_json["trades"]:
-                    if "stock_name" in item and "quantity" in item:
-                        extracted_dict[item["stock_name"]] = float(item["quantity"])
+                    name = item.get("stock_name")
+                    qty = item.get("quantity")
+                    if name and qty is not None:
+                        extracted_dict[name.strip()] = float(qty)
+            elif isinstance(parsed_json, dict):
+                # 예외 방어용 대피선
+                extracted_dict = {k: float(v) for k, v in parsed_json.items() if v is not None}
                         
         except Exception as e:
             st.error(f"AI 응답 파싱 실패 ({e}).")
