@@ -6,19 +6,14 @@ import streamlit as st
 
 KST = timezone(timedelta(hours=9))
 
+# 국내 종목 중 pykrx가 이름을 다르게 반환하는 경우의 수동 보정 맵
+# (pykrx 로딩 실패 시 최소 폴백 역할도 겸함)
 TICKER_MAP = {
-    # 개별 주식
     "삼성전자": "005930.KS",
     "SK하이닉스": "000660.KS",
     "현대차": "005380.KS",
     "카카오": "035720.KS",
     "NAVER": "035420.KS",
-    "Alphabet": "GOOGL",
-    "Apple": "AAPL",
-    "Microsoft": "MSFT",
-    "NVIDIA": "NVDA",
-    "Tesla": "TSLA",
-    # KODEX ETF
     "KODEX 200": "069500.KS",
     "KODEX 코스닥 150": "229200.KS",
     "KODEX 코스닥150": "229200.KS",
@@ -27,26 +22,38 @@ TICKER_MAP = {
     "KODEX 미국S&P500TR": "379800.KS",
     "KODEX 미국나스닥100TR": "379810.KS",
     "KODEX TDF2040액티브 적격": "448730.KS",
-    # "KODEX 코리아소버린AI" — yfinance 미등록 신규 ETF, 추후 확인 후 추가
+    "KODEX TDF2040액티브": "448730.KS",
     "KODEX 삼성전자SK하이닉스채권혼합액티브": "486290.KS",
-    # TIGER ETF
+    "KODEX 삼성전자SK하이닉스채권혼합": "486290.KS",
     "TIGER 미국S&P500": "360750.KS",
     "TIGER 미국나스닥100": "133690.KS",
     "TIGER 코스피200": "102110.KS",
-    # ARIRANG ETF
     "ARIRANG 미국S&P500": "269540.KS",
 }
+
+
+def resolve_ticker(stock_name: str, ticker_hint: str = "", krx_map: dict | None = None) -> str | None:
+    """종목명 → 야후파이낸스 티커 변환.
+    1순위: krx_map (Supabase에서 로드한 KRX 전체 맵)
+    2순위: TICKER_MAP (수동 보정 맵)
+    3순위: AI ticker_hint (미국주식)"""
+    base = krx_map if krx_map is not None else TICKER_MAP
+    normalized = " ".join(stock_name.split())
+    ticker = base.get(normalized) or base.get(stock_name)
+    if not ticker and ticker_hint:
+        ticker = ticker_hint.strip() or None
+    return ticker
 
 
 def _market_time_bucket() -> str:
     """장중/장외 구분 캐시 버킷 — 장중은 15분, 장외는 1시간 단위로 변경."""
     now = datetime.datetime.now(KST)
     h, m = now.hour, now.minute
-    kr_open = (9, 0) <= (h, m) < (15, 30)    # 한국장: 9:00~15:30 KST
-    us_open = (h, m) >= (22, 30) or h < 5    # 미국장: 22:30~05:00 KST
+    kr_open = (9, 0) <= (h, m) < (15, 30)
+    us_open = (h, m) >= (22, 30) or h < 5
     if kr_open or us_open:
-        return f"{now.date()}-{h}-{(m // 15) * 15}"  # 15분 단위
-    return f"{now.date()}-{h}"               # 장외: 1시간 단위
+        return f"{now.date()}-{h}-{(m // 15) * 15}"
+    return f"{now.date()}-{h}"
 
 
 @st.cache_data(ttl=3600)
@@ -79,6 +86,42 @@ def get_realtime_price(ticker):
     """단일 티커 조회 — 내부적으로 bulk 함수 사용 (하위 호환용)."""
     result = get_realtime_prices_bulk((ticker,), time_bucket=_market_time_bucket())
     return result.get(ticker)
+
+
+_MARKET_INDICES = {
+    "KOSPI":   "^KS11",
+    "KOSDAQ":  "^KQ11",
+    "S&P 500": "^GSPC",
+    "NASDAQ":  "^IXIC",
+}
+
+@st.cache_data(ttl=600)
+def get_market_weather(time_bucket: str = "") -> dict:
+    """4대 지수(KOSPI·KOSDAQ·S&P500·NASDAQ) 현재가 + 전일 대비 등락률.
+    time_bucket: 캐시 무효화용 — _market_time_bucket() 결과 전달.
+    반환: {지수명: {"current": float, "change_pct": float} | None}"""
+    tickers = list(_MARKET_INDICES.values())
+    result = {name: None for name in _MARKET_INDICES}
+    try:
+        data = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
+        if data.empty:
+            return result
+        close = data["Close"]
+        for name, ticker in _MARKET_INDICES.items():
+            try:
+                series = close[ticker] if len(tickers) > 1 else close
+                series = series.dropna()
+                if len(series) < 2:
+                    continue
+                prev, curr = float(series.iloc[-2]), float(series.iloc[-1])
+                if math.isnan(prev) or math.isnan(curr) or prev == 0:
+                    continue
+                result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return result
 
 
 @st.cache_data(ttl=3600)

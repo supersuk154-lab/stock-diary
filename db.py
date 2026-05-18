@@ -129,13 +129,12 @@ def get_recent_journals(user_id: str, _supabase, limit: int = 50):
 
 @st.cache_data(ttl=30)
 def get_real_inventory(user_id: str, _supabase):
-    """trades 테이블에서 매수 내역을 가져와 종목별 총 수량과 평단가를 계산.
-    type='dividend' 행은 재고 계산에서 제외."""
+    """trades 테이블에서 매수/매도 내역을 가져와 종목별 총 수량과 평단가를 정확히 계산합니다."""
     try:
         response = (
             _supabase.table("trades")
             .select("stock_name, quantity, price, currency, type")
-            .or_("type.eq.buy,type.is.null")
+            .neq("type", "dividend")
             .execute()
         )
         trades = response.data
@@ -146,31 +145,36 @@ def get_real_inventory(user_id: str, _supabase):
         inventory_map = {}
         for t in trades:
             name = t.get("stock_name")
-            qty = float(t.get("quantity", 0))
-            price = float(t.get("price") or 0)
+            raw_qty = float(t.get("quantity", 0))
+            price = float(t.get("price", 0))
             currency = t.get("currency", "KRW")
+            trade_type = t.get("type", "buy")
 
-            if not name or qty <= 0:
+            if not name or raw_qty == 0:
                 continue
 
-            if name not in inventory_map:
-                inventory_map[name] = {"총수량": 0, "총금액": 0, "통화": currency}
+            qty = -abs(raw_qty) if trade_type == "sell" else abs(raw_qty)
 
-            inventory_map[name]["총수량"] += qty
-            inventory_map[name]["총금액"] += (qty * price)
+            if name not in inventory_map:
+                inventory_map[name] = {"현재수량": 0, "총매수수량": 0, "총매수금액": 0, "통화": currency}
+
+            if qty > 0:
+                inventory_map[name]["총매수수량"] += qty
+                inventory_map[name]["총매수금액"] += (qty * price)
+
+            inventory_map[name]["현재수량"] += qty
 
         result = []
         for name, data in inventory_map.items():
-            if data["총수량"] > 0:
-                avg_price = data["총금액"] / data["총수량"]
+            if data["현재수량"] > 0:
+                avg_price = data["총매수금액"] / data["총매수수량"] if data["총매수수량"] > 0 else 0
                 result.append({
                     "종목": name,
-                    "수량": data["총수량"],
+                    "수량": data["현재수량"],
                     "평단가": avg_price,
                     "통화": data["통화"]
                 })
         return result
-
     except Exception as e:
         st.error(f"재고 데이터 집계 실패: {e}")
         return []
@@ -178,18 +182,21 @@ def get_real_inventory(user_id: str, _supabase):
 
 @st.cache_data(ttl=30)
 def get_dividend_total(user_id: str, _supabase) -> dict:
-    """배당금 합계 조회. {"KRW": 원화합계, "USD": 달러합계} 형태로 반환."""
+    """배당금 합계 조회. 과거 데이터(quantity)와 신규 데이터(dividend_amount) 모두 호환."""
     try:
         response = (
             _supabase.table("trades")
-            .select("quantity, currency")
+            .select("quantity, dividend_amount, currency")
             .eq("type", "dividend")
             .execute()
         )
         totals: dict = {"KRW": 0.0, "USD": 0.0}
         for t in response.data:
             cur = t.get("currency", "KRW")
-            totals[cur] = totals.get(cur, 0.0) + float(t.get("quantity", 0))
+            amount = t.get("dividend_amount")
+            if amount is None:
+                amount = float(t.get("quantity", 0))
+            totals[cur] = totals.get(cur, 0.0) + float(amount)
         return totals
     except Exception:
         return {"KRW": 0.0, "USD": 0.0}
