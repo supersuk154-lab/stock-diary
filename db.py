@@ -30,20 +30,22 @@ def to_kst_str(iso_ts: str) -> str:
 
 def calculate_scores(supabase, user_id: str = ""):
     """최근 30일 일기를 기반으로 투자 능력치 점수를 계산."""
+    if not user_id:
+        return {"원칙 준수": 0, "멘탈 방어": 0, "성실도": 0, "자기 객관화": 0}
+
     thirty_days_ago = (
         datetime.datetime.now(timezone.utc) - datetime.timedelta(days=30)
     ).isoformat()
 
     try:
-        query = (
+        response = (
             supabase.table("journals")
             .select("created_at, tags")
+            .eq("user_id", user_id)
             .gte("created_at", thirty_days_ago)
             .order("created_at", desc=True)
+            .execute()
         )
-        if user_id:
-            query = query.eq("user_id", user_id)
-        response = query.execute()
         rows = response.data
     except Exception as e:
         st.sidebar.warning(f"점수 조회 실패: {e}")
@@ -94,6 +96,8 @@ def has_tag(tags: list, keyword: str) -> bool:
 
 def get_past_context(tags, supabase, user_id: str = ""):
     """현재 선택된 태그 중 가장 중요한 감정 태그를 찾아 과거 일기를 소환."""
+    if not user_id:
+        return ""
     if not tags:
         return ""
 
@@ -109,16 +113,15 @@ def get_past_context(tags, supabase, user_id: str = ""):
         core_tag = tags[0]
 
     try:
-        query = (
+        response = (
             supabase.table("journals")
             .select("created_at, content")
+            .eq("user_id", user_id)
             .like("tags", f"%{core_tag}%")
             .order("created_at", desc=True)
             .limit(3)
+            .execute()
         )
-        if user_id:
-            query = query.eq("user_id", user_id)
-        response = query.execute()
         rows = response.data
     except Exception:
         rows = []

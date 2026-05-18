@@ -10,7 +10,7 @@ from constants import (
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE
 )
 
-MODEL_NAME = "gemini-3.1-flash-lite-preview"
+MODEL_NAME = "gemini-2.0-flash-lite"
 
 def render_upload_section(supabase, ai_client, selected_tags):
     """이미지 업로드 -> 데이터 검증 -> 최종 분석 섹션 흐름을 관리 및 렌더링합니다."""
@@ -119,6 +119,9 @@ def render_upload_section(supabase, ai_client, selected_tags):
     
         if not diff_data:
             st.success("🎉 DB 잔고와 동일합니다. 새로 변동된 내역이 없습니다.")
+            if st.button("📝 매매 없이 감정 일기만 저장하기", key="diary_only_btn"):
+                st.session_state['current_step'] = 'final_analysis'
+                st.rerun()
         else:
             st.info(f"DB 잔고와 비교해 **{len(diff_data)}개 종목**에 변동이 감지됐습니다. 수량을 확인하고 매매 사유를 적어주세요.")
     
@@ -336,6 +339,14 @@ def render_upload_section(supabase, ai_client, selected_tags):
                                     real_price = 0.0
                                     currency   = "KRW"
                                 
+                                # 가격이 0 이하이면 평단가 왜곡 방지를 위해 저장 제외하고 사용자에게 안내
+                                if real_price <= 0:
+                                    st.warning(
+                                        f"⚠️ **{trade['_normalized_name']}** 현재가를 불러오지 못해 평단가 기록을 건너뜁니다. "
+                                        f"나중에 '과거 기록 조회'에서 직접 수정해 주세요."
+                                    )
+                                    continue
+
                                 trades_to_insert.append({
                                     "stock_name": trade["_normalized_name"],
                                     "quantity":   abs(trade["quantity"]),

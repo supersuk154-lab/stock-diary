@@ -68,7 +68,8 @@ create table if not exists trades (
   quantity float not null default 0,
   price float not null default 0,
   currency text not null default 'KRW',
-  type text not null default 'buy'  -- 'buy' | 'sell' | 'dividend'
+  type text not null default 'buy',  -- 'buy' | 'sell' | 'dividend'
+  dividend_amount float              -- 배당금 금액 (type='dividend'일 때 사용)
 );
 
 -- 기존 trades 행에 type 컬럼이 없으면 backfill
@@ -91,6 +92,9 @@ create policy "Users can insert own trades"
 drop policy if exists "Users can delete own trades" on trades;
 create policy "Users can delete own trades"
   on trades for delete to authenticated using (auth.uid() = user_id);
+
+-- dividend_amount 컬럼 추가 (기존 테이블 마이그레이션용)
+alter table trades add column if not exists dividend_amount float;
 
 -- ==========================================================
 -- 완료! 이제 앱에서 정상 작동합니다.
