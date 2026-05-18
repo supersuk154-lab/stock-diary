@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 import os
 
 from prices import get_market_weather, _market_time_bucket, TICKER_MAP, get_realtime_price, get_realtime_prices_bulk, get_usd_to_krw
-from db import KST, get_past_context, has_tag, get_real_inventory, get_dividend_total, calculate_scores
+from db import KST, get_past_context, has_tag, get_real_inventory, get_dividend_total, calculate_scores, get_recent_journals
 from ai_helper import safe_generate
 from ui_components import render_radar_chart
 
@@ -363,7 +363,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
         
     else:
         # [핵심] 가짜 데이터 대신 Supabase DB에서 집계된 진짜 재고를 불러옴
-        my_portfolio = get_real_inventory(st.session_state["user_id"])
+        my_portfolio = get_real_inventory(st.session_state["user_id"], supabase)
     
         if not my_portfolio:
             st.info("아직 텅 비어있네요! 💸 이번 달은 삼성전자나 Alphabet 같은 든든한 자산을 모아 첫 기록을 남겨보는 건 어떨까요?")
@@ -459,7 +459,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
             st.caption("💡 '티커 미등록' 종목은 app.py의 TICKER_MAP에 야후파이낸스 코드를 추가하면 실시간 연동됩니다.")
     
             # ── 누적 배당금 요약 ─────────────────────────────────────
-            div_totals = get_dividend_total(st.session_state["user_id"])
+            div_totals = get_dividend_total(st.session_state["user_id"], supabase)
             div_parts = []
             if div_totals.get("KRW", 0) > 0:
                 div_parts.append(f"🇰🇷 {div_totals['KRW']:,.0f}원")
@@ -602,7 +602,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     
                 if div_submit and div_stock and div_amount > 0:
                     try:
-                        ___supabase.table("trades").insert({
+                        supabase.table("trades").insert({
                             "user_id":         st.session_state["user_id"],
                             "stock_name":      div_stock.strip(),
                             "quantity":        0.0, # 더 이상 배당금을 수량에 욱여넣지 않음
@@ -851,7 +851,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
             st.error(f"AI 응답 파싱 실패 ({e}).")
             extracted_dict = {}
     
-        current_inventory = {item["종목"]: item["수량"] for item in get_real_inventory(st.session_state["user_id"])}
+        current_inventory = {item["종목"]: item["수량"] for item in get_real_inventory(st.session_state["user_id"], supabase)}
     
         # AI가 인식한 종목에 대해서만 변동 추적
         # (사진에 없는 종목은 스크롤 미캡처 가능성이 있으므로 전량 매도로 간주하지 않음)
@@ -980,7 +980,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     
                 system_instruction = base_instruction
     
-                past_records = get_past_context(selected_tags)
+                past_records = get_past_context(selected_tags, supabase)
                 if past_records:
                     system_instruction += past_records
     
@@ -1102,7 +1102,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                         # ==========================================
                         tags_str = ", ".join(selected_tags) if selected_tags else ""
                         _uid = st.session_state["user_id"]
-                        ___supabase.table("journals").insert({
+                        supabase.table("journals").insert({
                             "user_id":     _uid,
                             "tags":        tags_str,
                             "content":     all_data_str,
@@ -1113,7 +1113,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                         if trades_to_insert:
                             for t in trades_to_insert:
                                 t["user_id"] = _uid
-                            ___supabase.table("trades").insert(trades_to_insert).execute()
+                            supabase.table("trades").insert(trades_to_insert).execute()
                         get_real_inventory.clear()
                                 
                     except json.JSONDecodeError as e:

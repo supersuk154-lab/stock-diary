@@ -71,6 +71,13 @@ def calculate_scores(supabase):
     return {"원칙 준수": principle, "멘탈 방어": mental, "성실도": consistency, "자기 객관화": review}
 
 
+def has_tag(tags: list, keyword: str) -> bool:
+    """선택된 태그 목록에 특정 키워드가 포함되어 있는지 확인."""
+    if not tags:
+        return False
+    return any(keyword in t for t in tags)
+
+
 def get_past_context(tags, supabase):
     """현재 선택된 태그 중 가장 중요한 감정 태그를 찾아 과거 일기를 소환."""
     if not tags:
