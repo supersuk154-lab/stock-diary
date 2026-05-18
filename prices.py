@@ -88,6 +88,42 @@ def get_realtime_price(ticker):
     return result.get(ticker)
 
 
+_MARKET_INDICES = {
+    "KOSPI":   "^KS11",
+    "KOSDAQ":  "^KQ11",
+    "S&P 500": "^GSPC",
+    "NASDAQ":  "^IXIC",
+}
+
+@st.cache_data(ttl=600)
+def get_market_weather(time_bucket: str = "") -> dict:
+    """4대 지수(KOSPI·KOSDAQ·S&P500·NASDAQ) 현재가 + 전일 대비 등락률.
+    time_bucket: 캐시 무효화용 — _market_time_bucket() 결과 전달.
+    반환: {지수명: {"current": float, "change_pct": float} | None}"""
+    tickers = list(_MARKET_INDICES.values())
+    result = {name: None for name in _MARKET_INDICES}
+    try:
+        data = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
+        if data.empty:
+            return result
+        close = data["Close"]
+        for name, ticker in _MARKET_INDICES.items():
+            try:
+                series = close[ticker] if len(tickers) > 1 else close
+                series = series.dropna()
+                if len(series) < 2:
+                    continue
+                prev, curr = float(series.iloc[-2]), float(series.iloc[-1])
+                if math.isnan(prev) or math.isnan(curr) or prev == 0:
+                    continue
+                result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return result
+
+
 @st.cache_data(ttl=3600)
 def get_usd_to_krw(time_bucket: str = "") -> float:
     """달러→원 환율 조회 (KRW=X 티커). 실패 시 1,380원 기본값 반환."""

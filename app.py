@@ -69,6 +69,35 @@ def get_usd_to_krw(time_bucket: str = "") -> float:
     except Exception:
         return 1380.0
 
+
+_MARKET_INDEX_TICKERS = ("^KS11", "^KQ11", "^GSPC", "^IXIC")
+_MARKET_INDEX_NAMES   = ("KOSPI", "KOSDAQ", "S&P 500", "NASDAQ")
+
+@st.cache_data(ttl=600)
+def get_market_weather(time_bucket: str = "") -> dict:
+    """4대 지수 현재가 + 전일 대비 등락률을 1번 호출로 조회.
+    반환: {지수명: {"current": float, "change_pct": float} | None}"""
+    result = {name: None for name in _MARKET_INDEX_NAMES}
+    try:
+        data = yf.download(list(_MARKET_INDEX_TICKERS), period="2d", auto_adjust=True, progress=False)
+        if data.empty:
+            return result
+        close = data["Close"]
+        for name, ticker in zip(_MARKET_INDEX_NAMES, _MARKET_INDEX_TICKERS):
+            try:
+                series = close[ticker].dropna()
+                if len(series) < 2:
+                    continue
+                prev, curr = float(series.iloc[-2]), float(series.iloc[-1])
+                if math.isnan(prev) or math.isnan(curr) or prev == 0:
+                    continue
+                result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return result
+
 # 우리가 모으는 주식들의 야후 파이낸스 티커(기호) 매핑 사전
 # 새 종목 추가 시: "종목명(AI가 인식한 이름과 정확히 동일)": "야후파이낸스티커"
 TICKER_MAP = {
@@ -900,6 +929,120 @@ def format_work_time(minutes: float) -> str:
     return f"{days}일 {rem_h}시간 근무" if rem_h else f"{days}일 근무"
 
 
+def render_fire_countdown(monthly_krw: float):
+    """FIRE 마일스톤 카드. monthly_krw: 예상 월 배당수입(원)"""
+    milestones = [
+        (50_000,    "🥚 주말 카페값 자유",   "주말마다 커피 걱정 끝!"),
+        (300_000,   "🐣 고정비 해방",        "통신비 + 넷플릭스 + 헬스장 커버"),
+        (1_000_000, "🐤 하프 은퇴",          "최소 생활비 절반 커버"),
+        (2_000_000, "🦅 완전한 경제적 자유", "이번 달 일 안 해도 됨!"),
+    ]
+
+    prev_goal = 0
+    next_goal, next_label, next_desc = milestones[0]
+    progress = 0.0
+    for goal, label, desc in milestones:
+        if monthly_krw < goal:
+            next_goal, next_label, next_desc = goal, label, desc
+            span = goal - prev_goal
+            progress = (monthly_krw - prev_goal) / span if span > 0 else 0.0
+            break
+        prev_goal = goal
+    else:
+        next_goal, next_label, next_desc = milestones[-1][0], "🎉 FIRE 졸업", "이미 완벽한 경제적 자유를 달성했습니다!"
+        progress = 1.0
+
+    progress = min(max(progress, 0.0), 1.0)
+    remaining = max(next_goal - monthly_krw, 0)
+    achieved = [label for goal, label, _ in milestones if monthly_krw >= goal]
+
+    st.markdown(
+        f'<div style="background:#f8f9fa; border-radius:14px; padding:16px 20px; '
+        f'margin-top:10px; border:1px solid #e9ecef;">'
+        f'<div style="font-size:0.85em; color:#868e96; font-weight:600; margin-bottom:6px;">⏳ FIRE 카운트다운</div>'
+        f'<div style="font-size:1.05em; font-weight:700; color:#339af0; margin-bottom:4px;">{next_label}</div>'
+        f'<div style="font-size:0.83em; color:#666; margin-bottom:8px;">{next_desc}</div>'
+        f'<div style="font-size:0.8em; color:#495057;">'
+        f'예상 월 배당: <b>{monthly_krw:,.0f}원</b>'
+        f'{f" · 목표까지 <b>{remaining:,.0f}원</b>" if remaining > 0 else ""}'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    st.progress(progress)
+    if achieved:
+        st.caption("달성 완료: " + "  ".join(achieved))
+
+
+def render_family_contributions(portfolio: list):
+    """주식 가족 분담금 카드. portfolio: get_real_inventory() 결과."""
+    try:
+        resp = (
+            supabase.table("trades")
+            .select("stock_name, dividend_amount, quantity, currency")
+            .eq("type", "dividend")
+            .execute()
+        )
+        div_by_stock: dict = {}
+        for r in resp.data:
+            name = r.get("stock_name")
+            amount = float(r.get("dividend_amount") or r.get("quantity") or 0)
+            div_by_stock[name] = div_by_stock.get(name, 0) + amount
+
+        # 포트폴리오 종목 중 배당 기록이 없는 종목 → 취준생으로 표시
+        for item in portfolio:
+            if item["종목"] not in div_by_stock:
+                div_by_stock[item["종목"]] = 0.0
+
+        if not div_by_stock:
+            st.info("아직 가족들이 용돈을 주지 않았어요. 조금 더 기다려볼까요?")
+            return
+
+        sorted_stocks = sorted(div_by_stock.items(), key=lambda x: x[1], reverse=True)
+        total_div = sum(v for _, v in sorted_stocks if v > 0)
+
+        rows_html = ""
+        for idx, (name, amount) in enumerate(sorted_stocks):
+            if amount == 0:
+                role, color = "취준생 둘째 🎧", "#adb5bd"
+                comment = "아직은 무직이지만 열심히 성장 중. 언젠가 일해줄 거예요!"
+                amount_str = "아직 없음"
+                pct_html = ""
+            elif idx == 0:
+                role, color = "든든한 맏형 🧑‍💼", "#339af0"
+                comment = "우리 집 기둥! 가장 많은 생활비를 보태주고 있어요."
+                amount_str = f"{amount:,.0f}원"
+                pct = amount / total_div * 100 if total_div > 0 else 0
+                pct_html = f'<div style="font-size:0.75em;color:#adb5bd;margin-top:3px;">전체 배당의 {pct:.1f}%</div>'
+            elif any(k in name for k in ("KODEX", "TIGER", "ARIRANG", "KBSTAR", "HANARO")):
+                role, color = "야무진 막내 👶", "#51cf66"
+                comment = "매달 꼬박꼬박 잊지 않고 효도하는 중!"
+                amount_str = f"{amount:,.0f}원"
+                pct = amount / total_div * 100 if total_div > 0 else 0
+                pct_html = f'<div style="font-size:0.75em;color:#adb5bd;margin-top:3px;">전체 배당의 {pct:.1f}%</div>'
+            else:
+                role, color = "성실한 식구 👨‍🌾", "#94d82d"
+                comment = "묵묵히 자기 몫의 분담금을 내고 있습니다."
+                amount_str = f"{amount:,.0f}원"
+                pct = amount / total_div * 100 if total_div > 0 else 0
+                pct_html = f'<div style="font-size:0.75em;color:#adb5bd;margin-top:3px;">전체 배당의 {pct:.1f}%</div>'
+
+            rows_html += (
+                f'<div style="padding:12px 16px; margin-bottom:8px; background:#fff; '
+                f'border-radius:10px; border-left:4px solid {color}; '
+                f'box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
+                f'<div style="font-weight:700; color:#212529;">{name} '
+                f'<span style="font-size:0.83em; color:#888; font-weight:400;">({role})</span></div>'
+                f'<div style="display:flex; justify-content:space-between; margin-top:5px; align-items:center;">'
+                f'<span style="font-size:0.82em; color:#666;">{comment}</span>'
+                f'<span style="font-weight:700; color:#2b8a3e; font-size:0.88em;">{amount_str}</span>'
+                f'</div>{pct_html}</div>'
+            )
+
+        st.markdown(rows_html, unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"가족 분담금 조회 실패: {e}")
+
+
 def get_daily_meal(daily_avg_krw: float) -> dict:
     """일 평균 배당금을 보편적인 식사/간식 메뉴로 변환."""
     if daily_avg_krw < 500:
@@ -969,10 +1112,50 @@ with tab1:
     # 🦇 [신규] 동굴 모드 (Zen Mode) 스위치
     # ==========================================
     zen_mode = st.toggle(
-        "🦇 동굴 모드 켜기", 
-        value=False, 
+        "🦇 동굴 모드 켜기",
+        value=False,
         help="시장이 폭락해 멘탈이 흔들릴 때 켜세요. 모든 수익률과 숫자를 가려줍니다."
     )
+
+    # ---------------------------------------------------------
+    # 🌤️ 증시 날씨판 — zen_mode 일 땐 숨김
+    # ---------------------------------------------------------
+    if not zen_mode:
+        _weather = get_market_weather(time_bucket=_market_time_bucket())
+        _weather_items = list(_weather.items())
+        _row1, _row2 = _weather_items[:2], _weather_items[2:]
+        for _row in (_row1, _row2):
+            _cols = st.columns(2)
+            for _col, (name, data) in zip(_cols, _row):
+                with _col:
+                    if data:
+                        pct = data["change_pct"]
+                        curr = data["current"]
+                        if pct > 0:
+                            color, icon, arrow = "#e03131", "☀️", "▲"
+                        elif pct < 0:
+                            color, icon, arrow = "#1c7ed6", "☔", "▼"
+                        else:
+                            color, icon, arrow = "#868e96", "☁️", "–"
+                        st.markdown(
+                            f'<div style="background:#f8f9fa; border-radius:10px; padding:12px; '
+                            f'text-align:center; border:1px solid #e9ecef; margin-bottom:8px;">'
+                            f'<div style="font-size:0.8em; color:#495057; font-weight:600;">{name} {icon}</div>'
+                            f'<div style="font-size:1.15em; font-weight:800; margin:4px 0;">{curr:,.2f}</div>'
+                            f'<div style="font-size:0.9em; font-weight:700; color:{color};">'
+                            f'{arrow} {abs(pct):.2f}%</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<div style="background:#f8f9fa; border-radius:10px; padding:12px; '
+                            f'text-align:center; border:1px solid #e9ecef; margin-bottom:8px;">'
+                            f'<div style="font-size:0.8em; color:#495057; font-weight:600;">{name}</div>'
+                            f'<div style="font-size:0.85em; color:#adb5bd; margin-top:8px;">💤 수신 지연</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+        st.markdown("<div style='margin-bottom:4px;'></div>", unsafe_allow_html=True)
 
     # ---------------------------------------------------------
     # 📱 1. 오늘의 멘토 설정 (아코디언)
@@ -1243,6 +1426,13 @@ with tab1:
                     f'</div></div>',
                     unsafe_allow_html=True,
                 )
+
+                # ── FIRE 카운트다운 ────────────────────────────────────
+                render_fire_countdown(daily_krw * 30.4)
+
+            # ── 가족 분담금 (배당 있는 경우에만) ─────────────────────
+            with st.expander("🏠 우리 집 주식 가족 분담금", expanded=False):
+                render_family_contributions(my_portfolio)
 
         # ── 배당금 직접 기록 폼 ──────────────────────────────────────
         with st.expander("🍯 배당금 직접 기록하기", expanded=False):
