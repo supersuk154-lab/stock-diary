@@ -1644,6 +1644,79 @@ with tab3:
 
         st.markdown("---")
 
+        # ── 관리자 전용: 소급 단가 수정 ──────────────────────────
+        st.markdown("### 🔄 [관리자] 소급 단가 수정")
+        st.caption(
+            "price=0으로 저장된 매수 기록에 야후파이낸스 거래일 종가를 조회해 소급 적용합니다. "
+            "티커를 찾을 수 없는 종목은 건너뜁니다."
+        )
+        if st.button("🔄 소급 단가 수정 실행", type="primary", key="retro_price_btn"):
+            import yfinance as _yf
+            with st.spinner("소급 수정 중... 잠시 기다려주세요."):
+                try:
+                    retro_resp = (
+                        supabase.table("trades")
+                        .select("id, stock_name, ticker, created_at, currency")
+                        .or_("type.eq.buy,type.is.null")
+                        .eq("price", 0)
+                        .execute()
+                    )
+                    retro_trades = retro_resp.data or []
+
+                    if not retro_trades:
+                        st.info("소급 수정할 기록이 없습니다. (price=0인 매수 기록 없음)")
+                    else:
+                        _krx_map = load_krx_ticker_map(supabase)
+                        updated, skipped, failed = 0, 0, 0
+                        prog = st.progress(0)
+                        status = st.empty()
+                        total = len(retro_trades)
+
+                        for i, trade in enumerate(retro_trades):
+                            prog.progress((i + 1) / total)
+                            trade_id   = trade["id"]
+                            stock_name = trade["stock_name"]
+                            ticker     = trade.get("ticker") or resolve_ticker(stock_name, krx_map=_krx_map)
+                            status.text(f"처리 중: {stock_name} ({i+1}/{total})")
+
+                            if not ticker:
+                                skipped += 1
+                                continue
+
+                            try:
+                                date_str = trade["created_at"][:10]
+                                start_dt = datetime.date.fromisoformat(date_str)
+                                end_dt   = start_dt + datetime.timedelta(days=7)
+                                hist = _yf.Ticker(ticker).history(
+                                    start=start_dt.isoformat(),
+                                    end=end_dt.isoformat(),
+                                    auto_adjust=True,
+                                )
+                                if hist.empty:
+                                    failed += 1
+                                    continue
+                                price = float(hist["Close"].iloc[0])
+                                if math.isnan(price) or price <= 0:
+                                    failed += 1
+                                    continue
+                                supabase.table("trades").update({
+                                    "price":  price,
+                                    "ticker": ticker,
+                                }).eq("id", trade_id).execute()
+                                updated += 1
+                            except Exception:
+                                failed += 1
+
+                        prog.empty()
+                        status.empty()
+                        get_real_inventory.clear()
+                        st.success(f"✅ 완료!  수정: {updated}건 · 티커 미확인: {skipped}건 · 가격 조회 실패: {failed}건")
+
+                except Exception as e:
+                    st.error(f"소급 수정 실패: {e}")
+
+        st.markdown("---")
+
     # 비밀번호 변경 (로그인 상태)
     st.markdown("### 🔑 비밀번호 변경")
     with st.form("change_pw_form", clear_on_submit=True):
