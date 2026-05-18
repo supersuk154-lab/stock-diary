@@ -63,10 +63,12 @@ def render_chat_section(supabase, ai_client) -> list:
     else:
         st.caption("선택한 태그를 보고 AI 멘토가 먼저 말을 걸어줍니다. 자유롭게 답하면서 마음을 정리해보세요.")
     
-        # 1) 대화 히스토리 표시 (입력창 위에 누적)
-        for msg in st.session_state.get('chat_messages', []):
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+        # 1) 대화 히스토리 표시 (입력창 위에 누적, 스크롤 컨테이너 적용)
+        chat_container = st.container(height=350)
+        with chat_container:
+            for msg in st.session_state.get('chat_messages', []):
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
     
         # 2) 인라인 입력 폼
         with st.form("mind_chat_form", clear_on_submit=True):

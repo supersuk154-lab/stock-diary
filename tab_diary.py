@@ -47,20 +47,20 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                         else:
                             color, icon, arrow = "#868e96", "☁️", "–"
                         st.markdown(
-                            f'<div style="background:#f8f9fa; border-radius:10px; padding:12px; '
+                            f'<div style="background:#f8f9fa; border-radius:12px; padding:16px; '
                             f'text-align:center; border:1px solid #e9ecef; margin-bottom:8px;">'
-                            f'<div style="font-size:0.8em; color:#495057; font-weight:600;">{name} {icon}</div>'
-                            f'<div style="font-size:1.15em; font-weight:800; margin:4px 0;">{curr:,.2f}</div>'
+                            f'<div style="font-size:0.82em; color:#495057; font-weight:600;">{name} {icon}</div>'
+                            f'<div style="font-size:1.3em; font-weight:800; margin:6px 0;">{curr:,.2f}</div>'
                             f'<div style="font-size:0.9em; font-weight:700; color:{color};">'
                             f'{arrow} {abs(pct):.2f}%</div></div>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown(
-                            f'<div style="background:#f8f9fa; border-radius:10px; padding:12px; '
+                            f'<div style="background:#f8f9fa; border-radius:12px; padding:16px; '
                             f'text-align:center; border:1px solid #e9ecef; margin-bottom:8px;">'
-                            f'<div style="font-size:0.8em; color:#495057; font-weight:600;">{name}</div>'
-                            f'<div style="font-size:0.85em; color:#adb5bd; margin-top:8px;">💤 수신 지연</div>'
+                            f'<div style="font-size:0.82em; color:#495057; font-weight:600;">{name}</div>'
+                            f'<div style="font-size:0.85em; color:#adb5bd; margin-top:12px;">💤 수신 지연</div>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )

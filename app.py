@@ -53,11 +53,21 @@ if 'uploader_key' not in st.session_state:
 # 🎨 [추가] 모바일 최적화 UI 테마 (토스 스타일)
 # ---------------------------------------------------------
 toss_style = """
+<link rel="preload" as="style" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
 <style>
     /* 1. 폰트 변경 (Pretendard 적용) */
-    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     html, body, [class*="css"] {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
+    }
+
+    /* 모바일 최소 글자 크기 보장 */
+    .stMarkdown p, .stMarkdown li, .stCaption {
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+    }
+    small, .stCaption > div {
+        font-size: 13px !important;
     }
 
     /* 2. 전체 배경색 및 텍스트 색상 (밝고 깔끔하게) */
@@ -69,9 +79,16 @@ toss_style = """
     /* 3. 불필요한 기본 UI 숨기기 (진짜 앱처럼) */
     #MainMenu {visibility: hidden;} /* 우측 상단 햄버거 메뉴 숨김 */
     footer {visibility: hidden;}    /* 하단 Streamlit 워터마크 숨김 */
-    header {visibility: hidden;}    /* 상단 헤더 공간 숨김 */
+    header[data-testid="stHeader"] {
+        height: 0 !important;
+        min-height: 0 !important;
+        visibility: hidden;
+    }
     
-    /* 4. 버튼 디자인 (메인 / 보조 분리) */
+    /* 4. 버튼 디자인 (메인 / 보조 분리 및 터치 영역 확대) */
+    button {
+        min-height: 44px !important;
+    }
     
     /* 🔵 메인 버튼 ('보내기', '저장' 등 type="primary") */
     button[kind="primary"], button[kind="primaryFormSubmit"] {
@@ -85,9 +102,10 @@ toss_style = """
         box-shadow: 0 4px 6px rgba(49, 130, 246, 0.2) !important;
         transition: all 0.2s ease-in-out !important;
     }
-    button[kind="primary"]:hover, button[kind="primaryFormSubmit"]:hover {
+    button[kind="primary"]:hover, button[kind="primaryFormSubmit"]:hover,
+    button[kind="primary"]:active, button[kind="primaryFormSubmit"]:active {
         background-color: #1B64DA !important; /* 마우스 오버 시 짙어짐 */
-        transform: translateY(-2px) !important;
+        transform: translateY(1px) !important;
     }
 
     /* ⚪ 보조 버튼 ('대화 초기화', '취소' 등 일반 버튼) */
@@ -101,7 +119,8 @@ toss_style = """
         width: 100% !important;
         transition: all 0.2s ease-in-out !important;
     }
-    button[kind="secondary"]:hover, button[kind="secondaryFormSubmit"]:hover {
+    button[kind="secondary"]:hover, button[kind="secondaryFormSubmit"]:hover,
+    button[kind="secondary"]:active, button[kind="secondaryFormSubmit"]:active {
         background-color: #E5E8EB !important; /* 마우스 오버 시 살짝 어두워짐 */
         color: #333D4B !important;
     }
@@ -130,10 +149,37 @@ toss_style = """
         border: none;
     }
 
-    /* 7. 모바일 뷰 여백 최적화 */
+    /* 구분선 연하게 */
+    hr {
+        border: none !important;
+        border-top: 1px solid #F2F4F6 !important;
+        margin: 20px 0 !important;
+    }
+
+    /* 탭(Bottom Nav 스타일) 최적화 */
+    div[data-testid="stTabs"] button[data-baseweb="tab"] {
+        flex: 1;
+        text-align: center;
+        padding: 12px 0;
+    }
+
+    /* Toast 위치 중앙 상단 */
+    div[data-testid="stToastContainer"] {
+        top: 5% !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        right: auto !important;
+        bottom: auto !important;
+    }
+    div[data-testid="stToast"] {
+        border-radius: 20px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+    }
+
+    /* 7. 모바일 뷰 여백 최적화 및 iOS Safe Area */
     .block-container {
-        padding-top: 2rem !important; /* 상단 여백 줄임 */
-        padding-bottom: 4rem !important;
+        padding-top: max(2rem, env(safe-area-inset-top)) !important; 
+        padding-bottom: max(4rem, env(safe-area-inset-bottom)) !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
         max-width: 600px !important; /* 모바일 앱처럼 폭을 제한 */

@@ -15,6 +15,22 @@ MODEL_NAME = "gemini-3.1-flash-lite"
 
 def render_upload_section(supabase, ai_client, selected_tags):
     """이미지 업로드 -> 데이터 검증 -> 최종 분석 섹션 흐름을 관리 및 렌더링합니다."""
+    # 단계 표시
+    step = st.session_state.get('current_step', 'upload_mode')
+    step_map = {
+        'upload_mode':    ("1/3", "매매 입력"),
+        'verify_data':    ("2/3", "내역 확인"),
+        'ask_next':       ("2/3", "내역 확인"),
+        'final_analysis': ("3/3", "AI 분석"),
+    }
+    step_num, step_name = step_map.get(step, ("", ""))
+    if step_num:
+        st.markdown(
+            f'<div style="font-size:0.82em; color:#8B95A1; margin-bottom:12px; font-weight:600;">'
+            f'STEP <b style="color:#3182F6;">{step_num}</b> · {step_name}</div>',
+            unsafe_allow_html=True
+        )
+
     # ---------------------------------------------------------
     # 1단계: 입력 모드
     # ---------------------------------------------------------
@@ -217,20 +233,17 @@ def render_upload_section(supabase, ai_client, selected_tags):
                 with col_text:
                     st.write(f"- {item}")
                 with col_del:
-                    if st.button("🗑️", key=f"del_{i}"):
+                    if st.button("삭제", key=f"del_{i}", use_container_width=True):
                         st.session_state['daily_stock_list'].pop(i)
                         st.rerun()
     
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("➕ 추가로 입력하기"):
-                st.session_state['uploader_key'] += 1
-                st.session_state['current_step'] = 'upload_mode'
-                st.rerun()
-        with col2:
-            if st.button("📊 아니오, 이제 분석해주세요"):
-                st.session_state['current_step'] = 'final_analysis'
-                st.rerun()
+        if st.button("📊 분석 시작하기", type="primary", use_container_width=True):
+            st.session_state['current_step'] = 'final_analysis'
+            st.rerun()
+        if st.button("➕ 추가 입력하기", use_container_width=True):
+            st.session_state['uploader_key'] += 1
+            st.session_state['current_step'] = 'upload_mode'
+            st.rerun()
     
     # ---------------------------------------------------------
     # 4단계: 최종 분석 및 저장
