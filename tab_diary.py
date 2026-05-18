@@ -1152,7 +1152,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     if zen_mode:
         st.info("🌿 **동굴 모드 작동 중**\n\n현재 점수와 능력치 차트를 숨겨두었습니다. 흔들리지 않는 멘탈이 가장 중요합니다.")
     else:
-        current_scores = calculate_scores()
+        current_scores = calculate_scores(supabase)
         radar_fig = render_radar_chart(current_scores)
         st.plotly_chart(radar_fig, use_container_width=True)
         st.info(f"🔥 현재 연속 기록(Streak): **{int(current_scores['성실도'] // 3.3)}일**")
