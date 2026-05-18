@@ -7,17 +7,12 @@ import streamlit as st
 KST = timezone(timedelta(hours=9))
 
 TICKER_MAP = {
-    # 개별 주식
+    # 국내 개별 주식 (미국 주식은 AI ticker_hint로 동적 처리)
     "삼성전자": "005930.KS",
     "SK하이닉스": "000660.KS",
     "현대차": "005380.KS",
     "카카오": "035720.KS",
     "NAVER": "035420.KS",
-    "Alphabet": "GOOGL",
-    "Apple": "AAPL",
-    "Microsoft": "MSFT",
-    "NVIDIA": "NVDA",
-    "Tesla": "TSLA",
     # KODEX ETF
     "KODEX 200": "069500.KS",
     "KODEX 코스닥 150": "229200.KS",

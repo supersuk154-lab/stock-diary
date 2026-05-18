@@ -603,7 +603,7 @@ def get_real_inventory(user_id: str):
         # 배당금 기록 제외 (type='buy' 또는 type이 없는 구 데이터만 포함)
         response = (
             supabase.table("trades")
-            .select("stock_name, quantity, price, currency, type")
+            .select("stock_name, quantity, price, currency, type, ticker")
             .or_("type.eq.buy,type.is.null")
             .execute()
         )
@@ -612,24 +612,25 @@ def get_real_inventory(user_id: str):
         if not trades:
             return []
 
-        # 종목별로 묶어서 총수량과 총 매수금액 계산
         inventory_map = {}
         for t in trades:
             name = t.get("stock_name")
             qty = float(t.get("quantity", 0))
             price = float(t.get("price", 0))
             currency = t.get("currency", "KRW")
+            ticker = t.get("ticker") or ""
 
             if not name or qty <= 0:
                 continue
 
             if name not in inventory_map:
-                inventory_map[name] = {"총수량": 0, "총금액": 0, "통화": currency}
+                inventory_map[name] = {"총수량": 0, "총금액": 0, "통화": currency, "티커": ticker}
+            elif not inventory_map[name]["티커"] and ticker:
+                inventory_map[name]["티커"] = ticker
 
             inventory_map[name]["총수량"] += qty
             inventory_map[name]["총금액"] += (qty * price)
 
-        # UI 출력용 리스트로 변환 및 평단가 계산
         result = []
         for name, data in inventory_map.items():
             if data["총수량"] > 0:
@@ -638,7 +639,8 @@ def get_real_inventory(user_id: str):
                     "종목": name,
                     "수량": data["총수량"],
                     "평단가": avg_price,
-                    "통화": data["통화"]
+                    "통화": data["통화"],
+                    "티커": data["티커"],
                 })
         return result
         
@@ -785,11 +787,12 @@ with tab1:
         if not my_portfolio:
             st.info("아직 텅 비어있네요! 💸 이번 달은 삼성전자나 Alphabet 같은 든든한 자산을 모아 첫 기록을 남겨보는 건 어떨까요?")
         else:
-            # 필요한 티커를 모아 한 번에 일괄 조회
+            # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 TICKER_MAP 폴백)
             all_tickers = tuple(
-                TICKER_MAP[item["종목"]]
-                for item in my_portfolio
-                if item["종목"] in TICKER_MAP
+                t for t in (
+                    item.get("티커") or TICKER_MAP.get(item["종목"])
+                    for item in my_portfolio
+                ) if t
             )
             _tb = _market_time_bucket()
             bulk_prices = get_realtime_prices_bulk(all_tickers, time_bucket=_tb) if all_tickers else {}
@@ -799,7 +802,7 @@ with tab1:
             total_krw = 0.0
             all_priced = True
             for _item in my_portfolio:
-                _ticker = TICKER_MAP.get(_item["종목"])
+                _ticker = _item.get("티커") or TICKER_MAP.get(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
                 if _price and _item["수량"] > 0:
                     if _item["통화"] == "KRW":
@@ -822,7 +825,7 @@ with tab1:
 
             rows_html = ""
             for item in my_portfolio:
-                ticker = TICKER_MAP.get(item["종목"])
+                ticker = item.get("티커") or TICKER_MAP.get(item["종목"])
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
                 currency = "원" if item["통화"] == "KRW" else "$"
@@ -1412,6 +1415,7 @@ with tab1:
                                     "quantity":   trade["quantity"],
                                     "price":      real_price,
                                     "currency":   currency,
+                                    "ticker":     ticker or "",
                                 })
 
                         # ==========================================
