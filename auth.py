@@ -1,0 +1,71 @@
+import streamlit as st
+from supabase import create_client
+from session_utils import save_session_to_disk
+
+
+def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> None:
+    """로그인/회원가입 UI. 성공 시 st.session_state에 세션 저장 후 st.rerun()."""
+    st.markdown("""
+    <div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
+        <h1 style="font-size: 2.3rem; font-weight: 800; color: #191F28; margin-bottom: 10px;">
+            <span style="color: #3182F6;">📈 AI</span> 주식 페이스메이커
+        </h1>
+        <p style="color: #8B95A1; font-size: 1.1rem; font-weight: 500;">흔들리지 않는 장기 투자의 시작</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### 🔐 로그인")
+    st.caption("이메일과 비밀번호를 입력해주세요. 처음 오신 분은 회원가입을 눌러주세요.")
+
+    with st.form("login_form"):
+        st.markdown("#### 로그인")
+        email = st.text_input("이메일", placeholder="you@example.com")
+        password = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요")
+        login_btn = st.form_submit_button("✅ 로그인", type="primary", use_container_width=True)
+
+    if login_btn:
+        if not email or not password:
+            st.warning("이메일과 비밀번호를 모두 입력해주세요.")
+        else:
+            try:
+                client = create_client(supabase_url, supabase_anon_key)
+                response = client.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password,
+                })
+                if response.session:
+                    st.session_state["supabase_session"] = {
+                        "access_token": response.session.access_token,
+                        "refresh_token": response.session.refresh_token,
+                    }
+                    st.session_state["user_id"] = response.user.id
+                    st.session_state["user_email"] = response.user.email
+                    save_session_to_disk(st.session_state["supabase_session"], dev_mode)
+                    st.rerun()
+            except Exception:
+                st.error("⚠️ 로그인 실패: 이메일이나 비밀번호를 다시 확인해주세요.")
+
+    st.markdown("---")
+
+    with st.expander("📝 처음 오셨나요? 회원가입"):
+        with st.form("signup_form"):
+            su_email = st.text_input("이메일", placeholder="you@example.com", key="su_email")
+            su_password = st.text_input("비밀번호", type="password", placeholder="6자리 이상", key="su_pw")
+            su_password2 = st.text_input("비밀번호 확인", type="password",
+                                         placeholder="비밀번호를 한 번 더 입력하세요", key="su_pw2")
+            signup_btn = st.form_submit_button("🎉 회원가입", type="primary", use_container_width=True)
+
+    if signup_btn:
+        if not su_email or not su_password or not su_password2:
+            st.warning("모든 항목을 입력해주세요.")
+        elif su_password != su_password2:
+            st.error("❌ 비밀번호가 일치하지 않습니다. 다시 확인해주세요.")
+        elif len(su_password) < 6:
+            st.warning("비밀번호는 6자리 이상으로 설정해주세요.")
+        else:
+            try:
+                client = create_client(supabase_url, supabase_anon_key)
+                client.auth.sign_up({"email": su_email, "password": su_password})
+                st.success("🎉 회원가입 완료! 위 로그인 폼에서 로그인해주세요.")
+            except Exception as e:
+                st.error(f"⚠️ 회원가입 실패: {e}")
