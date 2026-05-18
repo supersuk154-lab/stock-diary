@@ -17,4 +17,4 @@ def safe_generate(client, model_name, contents, config=None, fallback_msg="AI �
         return response.text, None
     except Exception as e:
         logger.exception("Gemini call failed")
-        return None, f"⚠️ {fallback_msg}\n\n상세: `{type(e).__name__}: {e}`"
+        return None, f"⚠️ {fallback_msg}\n\n잠시 후 다시 시도해 주세요."

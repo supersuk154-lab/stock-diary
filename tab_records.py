@@ -1,4 +1,5 @@
 import streamlit as st
+import html
 from db import to_kst_str, get_recent_journals
 from ui_components import card, banner, sanitize_html
 
@@ -65,9 +66,10 @@ def render_records_tab(supabase):
                 st.markdown(f"<div style='margin-bottom: 12px;'>{badges_html}</div>", unsafe_allow_html=True)
                 
                 # 오늘의 매수 내역 카드
+                safe_content = html.escape(content)
                 purchase_html = f"""
                 <div style="background: #F9FAFB; padding: 14px; border-radius: 10px; border-left: 3px solid #6B7684; margin-bottom: 14px; white-space: pre-wrap; font-family: Pretendard; font-size: 0.92em; color: #333D4B;">
-{content}
+{safe_content}
                 </div>
                 """
                 st.markdown("**🛒 오늘의 매매 내역**")

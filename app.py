@@ -1,4 +1,5 @@
 import streamlit as st
+import logging
 # [수정] 새로운 google-genai SDK 임포트
 from google import genai
 from google.genai import types
@@ -166,7 +167,7 @@ except Exception as e:
         'GEMINI_API_KEY = "AIza..."\n'
         "```"
     )
-    st.write(f"상세: `{e}`")
+    logging.exception("secrets 로드 실패")
     st.stop()
 
 # [수정] 새로운 SDK의 Client 초기화

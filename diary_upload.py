@@ -28,6 +28,15 @@ def render_upload_section(supabase, ai_client, selected_tags):
         )
     
         if uploaded_file is not None:
+            # [보안점검 #6] 파일 크기 제한 (10MB)
+            MAX_IMAGE_BYTES = 10 * 1024 * 1024
+            if uploaded_file.size > MAX_IMAGE_BYTES:
+                st.error("⚠️ 파일 크기가 10MB를 초과합니다. 더 작은 이미지를 올려주세요.")
+                st.stop()
+
+            # [보안점검 #6] PIL Decompression bomb 방지 (50MP 제한)
+            Image.MAX_IMAGE_PIXELS = 50_000_000
+
             original_image = Image.open(uploaded_file).convert("RGB")
     
             st.markdown("### 🛡️ 민감 정보 가림막")
@@ -44,6 +53,14 @@ def render_upload_section(supabase, ai_client, selected_tags):
             st.image(image, caption='최종 분석용 이미지', use_container_width=True)
     
             if st.button("✅ 가림막 설정 완료 및 정보 추출"):
+                # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
+                import time
+                last_call = st.session_state.get("last_ai_call", 0.0)
+                if time.time() - last_call < 3.0:
+                    st.warning("⚠️ 너무 빠른 속도로 요청하고 있습니다. 잠시 후 다시 시도해 주세요 (3초 제한).")
+                    st.stop()
+                st.session_state["last_ai_call"] = time.time()
+
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
                     config = types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -232,6 +249,14 @@ def render_upload_section(supabase, ai_client, selected_tags):
         show_balloons = has_tag(selected_tags, TAG_PRAISE_PAST) or has_tag(selected_tags, TAG_DIVIDEND)
     
         if 'final_result' not in st.session_state and 'final_error' not in st.session_state:
+            # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
+            import time
+            last_call = st.session_state.get("last_ai_call", 0.0)
+            if time.time() - last_call < 3.0:
+                st.warning("⚠️ 너무 빠른 속도로 요청하고 있습니다. 잠시 후 다시 시도해 주세요 (3초 제한).")
+                st.stop()
+            st.session_state["last_ai_call"] = time.time()
+
             with st.spinner('오늘의 전체 투자 내역을 바탕으로 멘토가 분석 중입니다...'):
                 base_instruction = """당신은 장기 투자자의 매매 일지 작성을 돕는 냉철하고 지혜로운 AI 페이스메이커입니다.
 사용자가 매매 메모(텍스트)와 함께 MTS 캡처 사진을 올릴 수 있습니다.

@@ -3,6 +3,7 @@ import json
 import datetime
 from db import to_kst_str, KST, get_recent_journals, get_real_inventory
 from ui_components import card, banner
+from auth import validate_password
 
 def render_settings_tab(supabase):
     st.markdown("### ⚙️ 설정 및 데이터 관리")
@@ -13,7 +14,7 @@ def render_settings_tab(supabase):
     st.markdown("#### 🔑 비밀번호 변경")
     
     with st.form("change_pw_form", clear_on_submit=True):
-        cp_new = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상 입력해주세요")
+        cp_new = st.text_input("새 비밀번호", type="password", placeholder="8자리 이상 (영문+숫자 포함)")
         cp_new2 = st.text_input("새 비밀번호 확인", type="password", placeholder="한번 더 입력해주세요")
         cp_btn = st.form_submit_button("🔒 변경 사항 저장", type="primary")
         
@@ -22,8 +23,8 @@ def render_settings_tab(supabase):
             banner("비밀번호 항목을 모두 입력해주세요.", type="warning")
         elif cp_new != cp_new2:
             banner("입력하신 두 비밀번호가 일치하지 않습니다.", type="error")
-        elif len(cp_new) < 6:
-            banner("비밀번호는 최소 6자리 이상이어야 합니다.", type="warning")
+        elif validate_password(cp_new):
+            banner(validate_password(cp_new), type="warning")
         else:
             try:
                 supabase.auth.update_user({"password": cp_new})

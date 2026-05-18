@@ -93,6 +93,14 @@ def render_chat_section(supabase, ai_client) -> list:
             st.rerun()
     
         if send_clicked and user_input and user_input.strip():
+            # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
+            import time
+            last_call = st.session_state.get("last_ai_call", 0.0)
+            if time.time() - last_call < 3.0:
+                st.warning("⚠️ 너무 빠른 속도로 메시지를 보내고 있습니다. 잠시 후 다시 시도해 주세요 (3초 제한).")
+                st.stop()
+            st.session_state["last_ai_call"] = time.time()
+
             # 사용자 메시지 저장
             st.session_state['chat_messages'].append(
                 {"role": "user", "content": user_input.strip()}
