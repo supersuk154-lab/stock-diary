@@ -759,8 +759,14 @@ def get_dividend_total(user_id: str) -> dict:
 # ==========================================
 # 🏠 메인 화면
 # ==========================================
-st.title("📈 AI 주식 페이스메이커")
-
+st.markdown("""
+<div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
+    <h1 style="font-size: 2.3rem; font-weight: 800; color: #191F28; margin-bottom: 10px;">
+        <span style="color: #3182F6;">📈 AI</span> 주식 페이스메이커
+    </h1>
+    <p style="color: #8B95A1; font-size: 1.1rem; font-weight: 500;">흔들리지 않는 장기 투자의 시작</p>
+</div>
+""", unsafe_allow_html=True)
 # [추가] 사이드바 상단에 로그인 정보 + 로그아웃 버튼
 st.sidebar.markdown(f"👤 **{st.session_state.get('user_email', '로그인됨')}**")
 if DEV_MODE:
