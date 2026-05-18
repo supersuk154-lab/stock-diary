@@ -1184,6 +1184,12 @@ with tab1:
                                 "additionalProperties": {"type": "number"},
                             },
                         ),
+                    config = types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema={
+                            "type": "OBJECT",
+                            "additionalProperties": {"type": "NUMBER"},
+                        }
                     )
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
@@ -1193,6 +1199,13 @@ with tab1:
 
                     text, err = safe_generate(extract_model, [extract_prompt, image],
                                               fallback_msg="이미지 분석 중 오류가 발생했어요.")
+                    text, err = safe_generate(
+                        client=ai_client, 
+                        model_name=MODEL_NAME, 
+                        contents=[extract_prompt, image],
+                        config=config,
+                        fallback_msg="이미지 분석 중 오류가 발생했어요."
+                    )
 
                     if err:
                         st.error(err)
