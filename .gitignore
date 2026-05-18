@@ -1,6 +1,5 @@
-# Streamlit 비밀키 및 세션 캐시
-.streamlit/secrets.toml
-.streamlit/session_cache.json
+# [수정 #3] Streamlit 전체 폴더 차단 (secrets.toml, session_cache.json 모두 포함)
+.streamlit/
 
 # 기존 로컬 DB
 diary.db

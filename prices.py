@@ -116,6 +116,7 @@ def get_market_weather(time_bucket: str = "") -> dict:
                 prev, curr = float(series.iloc[-2]), float(series.iloc[-1])
                 if math.isnan(prev) or math.isnan(curr) or prev == 0:
                     continue
+                # pyrefly: ignore [unsupported-operation]
                 result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
             except Exception:
                 pass
@@ -126,12 +127,18 @@ def get_market_weather(time_bucket: str = "") -> dict:
 
 @st.cache_data(ttl=3600)
 def get_usd_to_krw(time_bucket: str = "") -> float:
-    """달러→원 환율 조회 (KRW=X 티커). 실패 시 1,380원 기본값 반환."""
+    """달러→원 환율 조회 (KRW=X 티커). 실패 시 마지막 성공 환율 또는 1,380원 기본값 반환."""
+    _FALLBACK = 1380.0
     try:
         data = yf.download("KRW=X", period="1d", auto_adjust=True, progress=False)
         if data.empty:
-            return 1380.0
+            # [수정 #12] 마지막 성공 환율 캐시 사용
+            return st.session_state.get("_last_usd_krw", _FALLBACK)
         val = float(data["Close"].iloc[-1])
-        return val if not math.isnan(val) else 1380.0
+        if math.isnan(val):
+            return st.session_state.get("_last_usd_krw", _FALLBACK)
+        # 성공한 환율을 세션에 캐싱
+        st.session_state["_last_usd_krw"] = val
+        return val
     except Exception:
-        return 1380.0
+        return st.session_state.get("_last_usd_krw", _FALLBACK)

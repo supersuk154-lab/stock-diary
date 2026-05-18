@@ -101,13 +101,16 @@ def format_work_time(minutes: float) -> str:
     if minutes < 1:
         return "1분 미만"
     if minutes < 60:
+        # pyrefly: ignore [unnecessary-type-conversion]
         return f"{int(round(minutes))}분"
     h_total = minutes / 60
     if h_total < 8:
         h = int(h_total)
+        # pyrefly: ignore [unnecessary-type-conversion]
         m = int(round(minutes - h * 60))
         return f"{h}시간 {m}분" if m else f"{h}시간"
     days = int(h_total // 8)
+    # pyrefly: ignore [unnecessary-type-conversion]
     rem_h = int(round(h_total - days * 8))
     if rem_h >= 8:
         days += 1
@@ -173,6 +176,8 @@ def render_family_contributions(portfolio: list, _supabase, user_id: str):
         div_by_stock: dict = {}
         for r in resp.data:
             name = r.get("stock_name")
+            if not name:
+                continue  # [수정 #7] stock_name이 NULL이면 건너뜀
             amount = float(r.get("dividend_amount") or r.get("quantity") or 0)
             div_by_stock[name] = div_by_stock.get(name, 0) + amount
 
@@ -275,6 +280,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool):
             total_krw = 0.0
             all_priced = True
             for _item in my_portfolio:
+                # pyrefly: ignore [bad-argument-type]
                 _ticker = TICKER_MAP.get(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
                 if _price and _item["수량"] > 0:
@@ -298,6 +304,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool):
     
             rows_html = ""
             for item in my_portfolio:
+                # pyrefly: ignore [bad-argument-type]
                 ticker = TICKER_MAP.get(item["종목"])
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0

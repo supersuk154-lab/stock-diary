@@ -1,5 +1,30 @@
 import plotly.graph_objects as go
 import streamlit as st
+import bleach
+
+
+# AI 생성 HTML에서 허용할 태그/속성 화이트리스트 (XSS 방어)
+_ALLOWED_TAGS = [
+    "b", "i", "u", "em", "strong", "br", "p", "span", "div",
+    "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "hr",
+]
+_ALLOWED_ATTRIBUTES = {
+    "span": ["style"],
+    "div": ["style"],
+    "p": ["style"],
+}
+
+
+def sanitize_html(html_str: str) -> str:
+    """AI 생성 HTML을 화이트리스트 기반으로 정화하여 XSS를 방어합니다."""
+    if not html_str:
+        return ""
+    return bleach.clean(
+        html_str,
+        tags=_ALLOWED_TAGS,
+        attributes=_ALLOWED_ATTRIBUTES,
+        strip=True,
+    )
 
 def render_radar_chart(scores: dict):
     categories = list(scores.keys())
@@ -37,6 +62,7 @@ def render_radar_chart(scores: dict):
     )
     return fig
 
+# pyrefly: ignore [bad-function-definition]
 def card(title: str, content_html: str, icon: str = None):
     icon_html = f"<span style='font-size: 1.25em; margin-right: 6px;'>{icon}</span>" if icon else ""
     title_html = f"<div style='font-weight: 700; font-size: 1.05em; color: #191F28; margin-bottom: 10px; display: flex; align-items: center;'>{icon_html}{title}</div>" if title else ""

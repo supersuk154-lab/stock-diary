@@ -1,4 +1,5 @@
 import datetime
+import logging
 from datetime import timezone, timedelta
 import streamlit as st
 
@@ -48,7 +49,8 @@ def calculate_scores(supabase, user_id: str = ""):
         )
         rows = response.data
     except Exception as e:
-        st.sidebar.warning(f"점수 조회 실패: {e}")
+        # [수정 #10] UI 호출 대신 logging 사용 — 데이터 레이어에서 관심사 분리
+        logging.warning(f"점수 조회 실패: {e}")
         rows = []
 
     tags_list = [r["tags"] for r in rows if r.get("tags")]
@@ -136,7 +138,8 @@ def get_past_context(tags, supabase, user_id: str = ""):
     return context
 
 
-@st.cache_data(ttl=10)
+# [수정 #11] TTL 10→120초로 증가 (저장 직후 .clear() 호출 패턴이 이미 있으므로 안전)
+@st.cache_data(ttl=120)
 def get_recent_journals(user_id: str, _supabase, limit: int = 50):
     """user_id를 캐시 키에 포함해서 사용자별로 분리된 캐시를 사용."""
     try:

@@ -5,6 +5,7 @@ from google.genai import types
 from ai_helper import safe_generate
 from prices import _market_time_bucket, get_realtime_prices_bulk, TICKER_MAP
 from db import get_real_inventory, get_past_context, get_recent_journals, has_tag
+from ui_components import sanitize_html
 from constants import (
     TAG_PRAISE_PAST, TAG_DIVIDEND, TAG_SHAKY, TAG_IMPULSE_TRADE,
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE
@@ -100,6 +101,7 @@ def render_upload_section(supabase, ai_client, selected_tags):
         if 'processed_image' in st.session_state:
             st.image(st.session_state['processed_image'], caption='비교 확인용 사진', use_container_width=True)
     
+        _parse_error = False
         try:
             ai_text = st.session_state.get('temp_extracted_data', '{}')
             extracted_dict = json.loads(ai_text.strip())
@@ -107,17 +109,21 @@ def render_upload_section(supabase, ai_client, selected_tags):
         except Exception as e:
             st.error(f"AI 응답 파싱 실패 ({e}).")
             extracted_dict = {}
+            _parse_error = True
     
         current_inventory = {item["종목"]: item["수량"] for item in get_real_inventory(st.session_state["user_id"], supabase)}
     
         diff_data = {}
-        for stock, new_qty in extracted_dict.items():
-            old_qty = float(current_inventory.get(stock, 0))
-            change  = new_qty - old_qty
-            if change != 0:
-                diff_data[stock] = {"change": change, "old": old_qty, "new": new_qty}
+        if not _parse_error:
+            for stock, new_qty in extracted_dict.items():
+                old_qty = float(current_inventory.get(stock, 0))
+                change  = new_qty - old_qty
+                if change != 0:
+                    diff_data[stock] = {"change": change, "old": old_qty, "new": new_qty}
     
-        if not diff_data:
+        if _parse_error:
+            st.warning("AI 응답을 해석하지 못했습니다. 다시 업로드하거나 직접 입력해주세요.")
+        elif not diff_data:
             st.success("🎉 DB 잔고와 동일합니다. 새로 변동된 내역이 없습니다.")
             if st.button("📝 매매 없이 감정 일기만 저장하기", key="diary_only_btn"):
                 st.session_state['current_step'] = 'final_analysis'
@@ -309,6 +315,7 @@ def render_upload_section(supabase, ai_client, selected_tags):
                     st.session_state['final_error'] = err
                 else:
                     try:
+                        # pyrefly: ignore [missing-attribute]
                         ai_data = json.loads(final_text.strip())
                         ai_feedback = ai_data.get("ai_feedback", "기록이 저장되었습니다.")
                         extracted_trades = ai_data.get("extracted_trades", [])
@@ -341,10 +348,10 @@ def render_upload_section(supabase, ai_client, selected_tags):
                                 
                                 # 가격이 0 이하이면 평단가 왜곡 방지를 위해 저장 제외하고 사용자에게 안내
                                 if real_price <= 0:
-                                    st.warning(
-                                        f"⚠️ **{trade['_normalized_name']}** 현재가를 불러오지 못해 평단가 기록을 건너뜁니다. "
-                                        f"나중에 '과거 기록 조회'에서 직접 수정해 주세요."
-                                    )
+                                    # [수정 #6] 경고 메시지를 나중에 spinner 밖에서 표시
+                                    if '_skipped_stocks' not in st.session_state:
+                                        st.session_state['_skipped_stocks'] = []
+                                    st.session_state['_skipped_stocks'].append(trade['_normalized_name'])
                                     continue
 
                                 trades_to_insert.append({
@@ -358,13 +365,17 @@ def render_upload_section(supabase, ai_client, selected_tags):
                         # DB 실제 저장
                         tags_str = ", ".join(selected_tags) if selected_tags else ""
                         _uid = st.session_state["user_id"]
-                        supabase.table("journals").insert({
-                            "user_id":     _uid,
-                            "tags":        tags_str,
-                            "content":     all_data_str,
-                            "ai_feedback": ai_feedback,
-                        }).execute()
-                        get_recent_journals.clear()
+                        # [수정 #5] journals 저장에 try/except 추가
+                        try:
+                            supabase.table("journals").insert({
+                                "user_id":     _uid,
+                                "tags":        tags_str,
+                                "content":     all_data_str,
+                                "ai_feedback": ai_feedback,
+                            }).execute()
+                            get_recent_journals.clear()
+                        except Exception as journal_err:
+                            st.session_state['final_error'] = f"일기 저장 실패: {journal_err}"
     
                         if trades_to_insert:
                             for t in trades_to_insert:
@@ -378,6 +389,14 @@ def render_upload_section(supabase, ai_client, selected_tags):
                         st.error(f"⚠️ 저장 중 오류: {e}")
                         st.session_state['final_error'] = f"저장 실패: {e}"
     
+        # [수정 #6] spinner 밖에서 가격 미수신 경고 표시
+        skipped = st.session_state.pop('_skipped_stocks', [])
+        if skipped:
+            st.warning(
+                f"⚠️ **{len(skipped)}개 종목**의 현재가를 불러오지 못해 평단가 기록을 건너뛰었습니다: "
+                f"{', '.join(skipped)}\n\n나중에 '과거 기록 조회'에서 직접 수정해 주세요."
+            )
+
         if 'final_error' in st.session_state:
             st.error(st.session_state['final_error'])
             st.info("위 오류가 일시적인 것 같으면 잠시 후 다시 시도해주세요. **입력하신 내역은 아직 저장되지 않았습니다.**")
@@ -388,7 +407,8 @@ def render_upload_section(supabase, ai_client, selected_tags):
             if not st.session_state.get('toast_shown'):
                 st.toast("일기와 매매 기록이 창고에 입고되었습니다!", icon="📦")
                 st.session_state['toast_shown'] = True
-            st.markdown(st.session_state['final_result'], unsafe_allow_html=True)
+            # [수정 #2] AI 생성 HTML을 sanitize 처리하여 XSS 방어
+            st.markdown(sanitize_html(st.session_state['final_result']), unsafe_allow_html=True)
     
         if st.button("🔄 처음으로 돌아가기"):
             st.session_state['uploader_key'] = st.session_state.get('uploader_key', 0) + 1

@@ -83,6 +83,7 @@ def render_diary_tab(supabase, ai_client, dev_mode):
             options = ["🤖 정중한 AI 비서 (기본/깔끔)", "☕ 따뜻한 심리 상담가 (공감/위로)", "🤝 다정한 주식 찐친 (유쾌한 반말)", "🧊 팩트폭행 1타 강사 (단호/원칙)"]
         
         saved_mentor = st.session_state.get("chosen_mentor")
+        # pyrefly: ignore [bad-argument-type]
         default_index = options.index(saved_mentor) if saved_mentor in options else None
     
         st.selectbox(
@@ -132,7 +133,12 @@ def render_diary_tab(supabase, ai_client, dev_mode):
         if zen_mode:
             banner("🌿 <b>동굴 모드 작동 중</b><br>현재 점수와 투자 능력치 차트가 가려져 있습니다. 천천히 흔들리지 않는 마음이 가장 든든한 무기입니다.", type="success")
         else:
-            current_scores = calculate_scores(supabase, st.session_state.get("user_id", ""))
+            # [수정 #10] calculate_scores 예외를 호출부에서 UI 처리
+            try:
+                current_scores = calculate_scores(supabase, st.session_state.get("user_id", ""))
+            except Exception as e:
+                st.warning(f"점수 조회 실패: {e}")
+                current_scores = {"원칙 준수": 0, "멘탈 방어": 0, "성실도": 0, "자기 객관화": 0}
             radar_fig = render_radar_chart(current_scores)
             st.plotly_chart(radar_fig, use_container_width=True)
             streak_days = int(current_scores['성실도'] // 3.3)

@@ -195,7 +195,9 @@ if DEV_MODE and "supabase_session" not in st.session_state:
                     "access_token": _resp.session.access_token,
                     "refresh_token": _resp.session.refresh_token,
                 }
+                # pyrefly: ignore [missing-attribute]
                 st.session_state["user_id"] = _resp.user.id
+                # pyrefly: ignore [missing-attribute]
                 st.session_state["user_email"] = _resp.user.email
                 # 갱신된 토큰을 다시 저장
                 save_session_to_disk(st.session_state["supabase_session"], DEV_MODE)
@@ -208,9 +210,16 @@ if DEV_MODE and "supabase_session" not in st.session_state:
 # 🔌 [변경] Supabase 클라이언트 — 사용자 세션을 매번 주입
 #   기존 init_db()가 하던 역할을 대체
 # ==========================================
+@st.cache_resource
+def _get_supabase_client() -> Client:
+    """Supabase 클라이언트 인스턴스를 캐싱하여 재사용합니다."""
+    return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+
 def get_supabase() -> Client:
     """현재 로그인된 사용자의 세션을 가진 Supabase 클라이언트 반환."""
-    client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    # [수정 #8] 매번 새 클라이언트를 생성하지 않고 캐싱된 인스턴스 재사용
+    client = _get_supabase_client()
 
     session = st.session_state.get("supabase_session")
     if session:
@@ -262,6 +271,15 @@ st.sidebar.markdown(f"👤 **{st.session_state.get('user_email', '로그인됨')
 if DEV_MODE:
     st.sidebar.caption("🛠️ 개발 모드 — 세션 자동 유지 중")
 if st.sidebar.button("🚪 로그아웃"):
+    # [수정 #14] 작업 중인 데이터가 있으면 경고
+    has_unsaved = (
+        st.session_state.get('daily_stock_list')
+        or st.session_state.get('current_step', 'upload_mode') != 'upload_mode'
+    )
+    if has_unsaved and not st.session_state.get('_logout_confirmed'):
+        st.session_state['_logout_confirmed'] = True
+        st.sidebar.warning("⚠️ 입력 중인 데이터가 있습니다! 다시 한번 로그아웃 버튼을 누르면 진행합니다.")
+        st.stop()
     clear_session_from_disk()  # [추가] 디스크 세션도 함께 삭제
     for key in list(st.session_state.keys()):
         del st.session_state[key]

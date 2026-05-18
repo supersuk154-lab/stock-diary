@@ -10,7 +10,7 @@ TAG_TAKE_BREAK    = "☕ #한템포쉬어가기"
 
 # 감정/반성 태그
 TAG_SHAKY         = "😱 #오늘좀흔들"
-TAG_IMPULSE_TRADE = "💸 #뇌동매매반성"
+TAG_IMPULSE_TRADE = "🚨 #뇌동매매반성"
 TAG_MISTAKE       = "📝 #오늘의실수"
 
 # 멘토 옵션

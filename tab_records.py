@@ -1,6 +1,6 @@
 import streamlit as st
 from db import to_kst_str, get_recent_journals
-from ui_components import card, banner
+from ui_components import card, banner, sanitize_html
 
 def render_records_tab(supabase):
     st.markdown("### 📚 나의 투자 기록장")
@@ -75,9 +75,10 @@ def render_records_tab(supabase):
                 
                 # AI 피드백
                 st.markdown("**🧠 AI 멘토의 솔루션**")
+                # [수정 #2] AI 생성 HTML을 sanitize 처리하여 XSS 방어
                 feedback_html = f"""
                 <div style="background: #E8F4FF; padding: 14px; border-radius: 10px; border-left: 3px solid #3182F6; font-family: Pretendard; font-size: 0.92em; color: #191F28; line-height: 1.6;">
-{feedback}
+{sanitize_html(feedback)}
                 </div>
                 """
                 st.markdown(feedback_html, unsafe_allow_html=True)

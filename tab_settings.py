@@ -88,9 +88,10 @@ def render_settings_tab(supabase):
     st.markdown("<h4 style='color: #E03131;'>⚠️ 계정 데이터 삭제</h4>", unsafe_allow_html=True)
     st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>이 작업은 복구가 불가능합니다. 신중히 결정해 주세요.</p>", unsafe_allow_html=True)
 
-    with st.expander("🚨 나의 모든 정보 영구 삭제"):
+    with st.expander("🚨 나의 기록 데이터 영구 삭제"):
+        st.caption("⚠️ 주의: 일기 및 매매 기록만 삭제됩니다. 계정(이메일/비밀번호)은 유지되므로 같은 계정으로 다시 로그인할 수 있습니다.")
         confirm = st.text_input('본인 확인을 위해 아래 입력창에 "삭제합니다"를 입력해주세요', key="delete_confirm")
-        if st.button("💥 계정 데이터 및 기록 영구 삭제", type="primary"):
+        if st.button("💥 내 기록 데이터 영구 삭제", type="primary"):
             if confirm == "삭제합니다":
                 try:
                     _uid = st.session_state["user_id"]

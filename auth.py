@@ -38,7 +38,9 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
                         "access_token": response.session.access_token,
                         "refresh_token": response.session.refresh_token,
                     }
+                    # pyrefly: ignore [missing-attribute]
                     st.session_state["user_id"] = response.user.id
+                    # pyrefly: ignore [missing-attribute]
                     st.session_state["user_email"] = response.user.email
                     save_session_to_disk(st.session_state["supabase_session"], dev_mode)
                     st.rerun()
@@ -111,7 +113,7 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
                         response = client.auth.verify_otp({
                             "email": st.session_state["pw_reset_email"],
                             "token": otp_code,
-                            "type": "email",
+                            "type": "recovery",  # [수정] 비밀번호 재설정 목적에 맞는 type
                         })
                         if response.session:
                             st.session_state["pw_reset_session"] = {
