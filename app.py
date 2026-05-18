@@ -1616,9 +1616,12 @@ with tab3:
                 else:
                     df = pd.read_excel(uploaded, dtype=str)
 
-                # 컬럼명 유연하게 탐색
-                name_col = next((c for c in df.columns if "종목명" in c or c == "Name"), None)
-                code_col = next((c for c in df.columns if "종목코드" in c or "단축코드" in c or c in ("Code", "Symbol")), None)
+                # 약명 우선(MTS 표시명) → 정식명 순으로 탐색
+                name_col = (
+                    next((c for c in df.columns if "종목약명" in c), None)
+                    or next((c for c in df.columns if "종목명" in c or c == "Name"), None)
+                )
+                code_col = next((c for c in df.columns if "단축코드" in c or "종목코드" in c or c in ("Code", "Symbol")), None)
 
                 if not name_col or not code_col:
                     st.error(f"컬럼을 찾지 못했습니다. 파일 컬럼: {list(df.columns)}")
