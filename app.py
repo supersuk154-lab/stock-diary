@@ -1231,9 +1231,14 @@ with tab1:
         # ── 1) diff 계산 (폼 바깥에서 한 번만 실행) ──────────────────────
         try:
             ai_text = st.session_state.get('temp_extracted_data', '{}')
-            # Structured Outputs 덕분에 순수 JSON이 보장됨 — 정규표현식 불필요
-            extracted_dict = json.loads(ai_text.strip())
-            extracted_dict = {k: float(v) for k, v in extracted_dict.items()}
+            parsed_json = json.loads(ai_text.strip())
+            
+            extracted_dict = {}
+            if "trades" in parsed_json:
+                for item in parsed_json["trades"]:
+                    if "stock_name" in item and "quantity" in item:
+                        extracted_dict[item["stock_name"]] = float(item["quantity"])
+                        
         except Exception as e:
             st.error(f"AI 응답 파싱 실패 ({e}).")
             extracted_dict = {}
@@ -1670,6 +1675,14 @@ with tab3:
                     _uid = st.session_state["user_id"]
                     supabase.table("journals").delete().eq("user_id", _uid).execute()
                     supabase.table("trades").delete().eq("user_id", _uid).execute()
+                    get_recent_journals.clear()
+                    get_real_inventory.clear()
+                    st.success("모든 일기와 매매 기록이 삭제되었습니다.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"삭제 실패: {e}")
+            else:
+                st.warning('확인 문구를 정확히 입력해주세요.')
                     get_recent_journals.clear()
                     get_real_inventory.clear()
                     st.success("모든 일기와 매매 기록이 삭제되었습니다.")
