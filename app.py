@@ -1,164 +1,20 @@
 import streamlit as st
-# [수정] 새로운 google-genai SDK 임포트
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 import os
 import json
 import re
-import math
 import datetime
 from datetime import timezone, timedelta
 from pathlib import Path
-import yfinance as yf
-
-# ==========================================
-# 📈 실시간 주가 일괄 조회 엔진 (캐싱 적용)
-#   여러 티커를 한 번의 HTTP 요청으로 처리해 yfinance 밴 위험 최소화
-# ==========================================
-def _market_time_bucket() -> str:
-    """장중/장외 구분 캐시 버킷 — 장중은 15분, 장외는 1시간 단위로 변경."""
-    now = datetime.datetime.now(KST)
-    h, m = now.hour, now.minute
-    kr_open = (9, 0) <= (h, m) < (15, 30)    # 한국장: 9:00~15:30 KST
-    us_open = (h, m) >= (22, 30) or h < 5    # 미국장: 22:30~05:00 KST
-    if kr_open or us_open:
-        return f"{now.date()}-{h}-{(m // 15) * 15}"  # 15분 단위
-    return f"{now.date()}-{h}"               # 장외: 1시간 단위
-
-@st.cache_data(ttl=3600)
-def get_realtime_prices_bulk(tickers: tuple, time_bucket: str = "") -> dict:
-    """tickers: 튜플로 전달 (list는 st.cache_data 해시 불가)
-    time_bucket: 장중/장외 TTL 제어용 — _market_time_bucket() 결과 전달
-    반환: {ticker: price} 딕셔너리"""
-    if not tickers:
-        return {}
-    try:
-        data = yf.download(list(tickers), period="1d", auto_adjust=True, progress=False)
-        prices = {}
-        if data.empty:
-            return {}
-        for ticker in tickers:
-            try:
-                if len(tickers) == 1:
-                    val = float(data["Close"].iloc[-1])
-                else:
-                    val = float(data["Close"][ticker].iloc[-1])
-                prices[ticker] = None if math.isnan(val) else val
-            except Exception:
-                prices[ticker] = None
-        return prices
-    except Exception:
-        return {}
-
-
-def get_realtime_price(ticker):
-    """단일 티커 조회 — 내부적으로 bulk 함수 사용 (하위 호환용)."""
-    result = get_realtime_prices_bulk((ticker,), time_bucket=_market_time_bucket())
-    return result.get(ticker)
-
-
-@st.cache_data(ttl=3600)
-def get_usd_to_krw(time_bucket: str = "") -> float:
-    """달러→원 환율 조회 (KRW=X 티커). 실패 시 1,380원 기본값 반환."""
-    try:
-        data = yf.download("KRW=X", period="1d", auto_adjust=True, progress=False)
-        if data.empty:
-            return 1380.0
-        val = float(data["Close"].iloc[-1])
-        return val if not math.isnan(val) else 1380.0
-    except Exception:
-        return 1380.0
-
-
-_MARKET_INDEX_TICKERS = ("^KS11", "^KQ11", "^GSPC", "^IXIC")
-_MARKET_INDEX_NAMES   = ("KOSPI", "KOSDAQ", "S&P 500", "NASDAQ")
-
-@st.cache_data(ttl=600)
-def get_market_weather(time_bucket: str = "") -> dict:
-    """4대 지수 현재가 + 전일 대비 등락률을 1번 호출로 조회.
-    반환: {지수명: {"current": float, "change_pct": float} | None}"""
-    result = {name: None for name in _MARKET_INDEX_NAMES}
-    try:
-        data = yf.download(list(_MARKET_INDEX_TICKERS), period="2d", auto_adjust=True, progress=False)
-        if data.empty:
-            return result
-        close = data["Close"]
-        for name, ticker in zip(_MARKET_INDEX_NAMES, _MARKET_INDEX_TICKERS):
-            try:
-                series = close[ticker].dropna()
-                if len(series) < 2:
-                    continue
-                prev, curr = float(series.iloc[-2]), float(series.iloc[-1])
-                if math.isnan(prev) or math.isnan(curr) or prev == 0:
-                    continue
-                result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return result
-
-# 우리가 모으는 주식들의 야후 파이낸스 티커(기호) 매핑 사전
-# 새 종목 추가 시: "종목명(AI가 인식한 이름과 정확히 동일)": "야후파이낸스티커"
-TICKER_MAP = {
-    # 개별 주식
-    "삼성전자": "005930.KS",
-    "SK하이닉스": "000660.KS",
-    "현대차": "005380.KS",
-    "카카오": "035720.KS",
-    "NAVER": "035420.KS",
-    "Alphabet": "GOOGL",
-    "Apple": "AAPL",
-    "Microsoft": "MSFT",
-    "NVIDIA": "NVDA",
-    "Tesla": "TSLA",
-    # KODEX ETF
-    "KODEX 200": "069500.KS",
-    "KODEX 코스닥 150": "229200.KS",
-    "KODEX 코스닥150": "229200.KS",
-    "KODEX 레버리지": "122630.KS",
-    "KODEX 인버스": "114800.KS",
-    "KODEX 미국S&P500TR": "379800.KS",
-    "KODEX 미국나스닥100TR": "379810.KS",
-    "KODEX TDF2040액티브 적격": "448730.KS",
-    # "KODEX 코리아소버린AI" — yfinance 미등록 신규 ETF, 추후 확인 후 추가
-    "KODEX 삼성전자SK하이닉스채권혼합액티브": "486290.KS",
-    # TIGER ETF
-    "TIGER 미국S&P500": "360750.KS",
-    "TIGER 미국나스닥100": "133690.KS",
-    "TIGER 코스피200": "102110.KS",
-    # ARIRANG ETF
-    "ARIRANG 미국S&P500": "269540.KS",
-}
-
-# [변경] 이미지 처리 라이브러리는 그대로
 from PIL import Image, ImageDraw
-
-# [변경] sqlite3 → supabase
 from supabase import create_client, Client
 
-# 한국 시간대 상수 (UTC+9)
-KST = timezone(timedelta(hours=9))
-
-# ==========================================
-# 💰 노동 환산 기준 — "오늘의 알바생" 기능용
-#   - secrets.toml에 MY_HOURLY_WAGE = 25000 같이 넣으면 본인 시급으로 환산
-#   - 카드 내 expander로 세션 단위 변경도 가능 (st.session_state["_custom_wage"])
-#   - 우선순위: 세션 임시값 > secrets.toml > 2026년 최저시급
-# ==========================================
-KR_MIN_WAGE_2026 = 10_320   # 2026.1.1 ~ 2026.12.31 적용 (고용노동부 고시)
-
-def _get_active_wage() -> int:
-    """현재 적용할 시급 결정. 매 호출마다 최신 값 반영."""
-    try:
-        if "_custom_wage" in st.session_state:
-            return int(st.session_state["_custom_wage"])
-    except Exception:
-        pass
-    try:
-        return int(st.secrets.get("MY_HOURLY_WAGE", KR_MIN_WAGE_2026))
-    except Exception:
-        return KR_MIN_WAGE_2026
+from prices import TICKER_MAP, KST, _market_time_bucket, get_realtime_prices_bulk, get_usd_to_krw
+from ai_helper import safe_generate
+from db import (
+    to_kst_str, calculate_scores, get_past_context,
+    get_recent_journals, get_real_inventory, get_dividend_total,
+)
 
 # 2. 앱 기본 설정
 st.set_page_config(page_title="AI 주식 다이어리", page_icon="📈", layout="centered")
@@ -271,8 +127,8 @@ toss_style = """
 st.markdown(toss_style, unsafe_allow_html=True)
 # ---------------------------------------------------------
 
-# [수정] 지정하신 최신 고속 모델로 변경
-MODEL_NAME = "gemini-3.1-flash-lite-preview"
+# [변경] 사용할 Gemini 모델 (그대로)
+MODEL_NAME = "gemini-3-flash-preview"
 
 # ==========================================
 # 🔐 [변경] 비밀키 로드 — st.secrets 사용
@@ -298,15 +154,18 @@ except Exception as e:
     st.write(f"상세: `{e}`")
     st.stop()
 
-# [수정] 새로운 SDK의 Client 초기화
-ai_client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+
 
 # ==========================================
 # 🛠️ [추가] 개발 모드 — 매번 로그인 안 해도 되게 세션 유지
 #   secrets.toml에 DEV_MODE = true 를 추가하면 활성화
 #   본인 PC에서만 사용. 클라우드 배포 시엔 반드시 false 또는 삭제!
 # ==========================================
-DEV_MODE = st.secrets.get("DEV_MODE", False)
+DEV_MODE = (
+    st.secrets.get("DEV_MODE", False)
+    and not os.environ.get("STREAMLIT_SERVER_HEADLESS")
+)
 SESSION_CACHE_PATH = Path(".streamlit") / "session_cache.json"
 
 def save_session_to_disk(session_dict: dict) -> None:
@@ -373,10 +232,15 @@ def get_supabase() -> Client:
     session = st.session_state.get("supabase_session")
     if session:
         try:
-            client.auth.set_session(
+            resp = client.auth.set_session(
                 access_token=session["access_token"],
                 refresh_token=session["refresh_token"],
             )
+            if resp and resp.session:
+                st.session_state["supabase_session"] = {
+                    "access_token": resp.session.access_token,
+                    "refresh_token": resp.session.refresh_token,
+                }
         except Exception:
             # 세션 만료 시 자동 로그아웃
             st.session_state.pop("supabase_session", None)
@@ -448,85 +312,6 @@ def show_login():
             except Exception as e:
                 st.error(f"⚠️ 회원가입 실패: {e}")
 
-    st.markdown("---")
-
-    # 비밀번호 찾기 (3단계: 이메일 → 인증코드 → 새 비밀번호)
-    with st.expander("🔑 비밀번호를 잊으셨나요?"):
-        step = st.session_state.get("pw_reset_step", "email")
-
-        if step == "email":
-            with st.form("reset_email_form"):
-                reset_email = st.text_input("가입한 이메일", placeholder="you@example.com")
-                send_btn = st.form_submit_button("📨 인증코드 받기", type="primary", use_container_width=True)
-            if send_btn:
-                if not reset_email:
-                    st.warning("이메일을 입력해주세요.")
-                else:
-                    try:
-                        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-                        client.auth.sign_in_with_otp({
-                            "email": reset_email,
-                            "options": {"should_create_user": False},
-                        })
-                        st.session_state["pw_reset_email"] = reset_email
-                        st.session_state["pw_reset_step"] = "otp"
-                        st.success(f"📧 {reset_email}로 인증코드를 보냈습니다.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"발송 실패: {e}")
-
-        elif step == "otp":
-            st.info(f"📧 **{st.session_state.get('pw_reset_email')}** 으로 인증코드를 보냈습니다.")
-            with st.form("reset_otp_form"):
-                otp_code = st.text_input("이메일로 받은 인증코드", max_chars=8, placeholder="6~8자리")
-                otp_btn = st.form_submit_button("✅ 확인", type="primary", use_container_width=True)
-            if otp_btn:
-                if not otp_code:
-                    st.warning("인증코드를 입력해주세요.")
-                else:
-                    try:
-                        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-                        response = client.auth.verify_otp({
-                            "email": st.session_state["pw_reset_email"],
-                            "token": otp_code,
-                            "type": "email",
-                        })
-                        if response.session:
-                            st.session_state["pw_reset_session"] = {
-                                "access_token": response.session.access_token,
-                                "refresh_token": response.session.refresh_token,
-                            }
-                            st.session_state["pw_reset_step"] = "new_password"
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"인증 실패: {e}")
-
-        elif step == "new_password":
-            st.success("✅ 본인 확인 완료! 새 비밀번호를 설정해주세요.")
-            with st.form("reset_newpw_form"):
-                new_pw = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상")
-                new_pw2 = st.text_input("새 비밀번호 확인", type="password")
-                save_btn = st.form_submit_button("🔒 비밀번호 변경", type="primary", use_container_width=True)
-            if save_btn:
-                if not new_pw or not new_pw2:
-                    st.warning("비밀번호를 입력해주세요.")
-                elif new_pw != new_pw2:
-                    st.error("❌ 비밀번호가 일치하지 않습니다.")
-                elif len(new_pw) < 6:
-                    st.warning("6자리 이상으로 설정해주세요.")
-                else:
-                    try:
-                        reset_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-                        rs = st.session_state["pw_reset_session"]
-                        reset_client.auth.set_session(rs["access_token"], rs["refresh_token"])
-                        reset_client.auth.update_user({"password": new_pw})
-                        st.success("✅ 비밀번호가 변경되었습니다! 위 로그인 폼에서 로그인해주세요.")
-                        for k in ["pw_reset_step", "pw_reset_email", "pw_reset_session"]:
-                            st.session_state.pop(k, None)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"변경 실패: {e}")
-
 
 # [추가] 로그인 안 되어 있으면 여기서 멈춤
 if not st.session_state.get("supabase_session"):
@@ -546,86 +331,6 @@ if "chosen_mentor" not in st.session_state:
                 st.session_state["chosen_mentor"] = saved
     except Exception:
         pass
-
-
-# ==========================================
-# 🕒 [추가] 타임스탬프 변환 헬퍼
-#   Postgres의 timestamptz는 ISO 8601 형식으로 옴
-#   → KST로 변환해서 기존 코드 형식과 호환되게 만듦
-# ==========================================
-def to_kst_str(iso_ts: str) -> str:
-    """Postgres timestamptz → 'YYYY-MM-DD HH:MM:SS' (KST)"""
-    if not iso_ts:
-        return ""
-    try:
-        dt = datetime.datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
-        return dt.astimezone(KST).strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return iso_ts
-
-
-# ==========================================
-# 📊 [Phase 3] 30일 윈도우 점수 계산 — Supabase 버전
-# ==========================================
-def calculate_scores():
-    # 30일 전 시점 (UTC ISO 형식으로 Postgres에 전달)
-    thirty_days_ago = (
-        datetime.datetime.now(timezone.utc) - datetime.timedelta(days=30)
-    ).isoformat()
-
-    try:
-        response = (
-            supabase.table("journals")
-            .select("created_at, tags")
-            .gte("created_at", thirty_days_ago)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        rows = response.data
-    except Exception as e:
-        st.sidebar.warning(f"점수 조회 실패: {e}")
-        rows = []
-
-    tags_list = [r["tags"] for r in rows if r.get("tags")]
-    # KST 기준으로 날짜만 뽑아냄
-    dates = sorted(
-        list(set([to_kst_str(r["created_at"]).split()[0] for r in rows if r.get("created_at")])),
-        reverse=True
-    )
-
-    # ▼ 점수 로직은 그대로 유지 ▼
-    # 1. 원칙 준수
-    routine_count = sum(1 for t in tags_list if "#월급날정기매수" in t)
-    dividend_count = sum(1 for t in tags_list if "#배당금달달해" in t)
-    principle = min((routine_count * 70) + (dividend_count * 30), 100)
-
-    # 2. 멘탈 방어
-    panic_count = sum(1 for t in tags_list if "#뇌동매매반성" in t)
-    mental = max(100 - (panic_count * 30), 0)
-
-    # 3. 자기 객관화
-    review_count = sum(1 for t in tags_list if "#오늘의실수" in t)
-    review = min(review_count * 25, 100)
-
-    # 4. 성실도 (Streak)
-    streak = 0
-    today = datetime.datetime.now(KST).date()
-    yesterday = today - datetime.timedelta(days=1)
-
-    if dates:
-        first_record_date = datetime.datetime.strptime(dates[0], "%Y-%m-%d").date()
-        if first_record_date == today or first_record_date == yesterday:
-            current_check_date = first_record_date
-            for d_str in dates:
-                d = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
-                if d == current_check_date:
-                    streak += 1
-                    current_check_date -= datetime.timedelta(days=1)
-                else:
-                    break
-
-    consistency = min(streak * 3.3, 100)
-    return {"원칙 준수": principle, "멘탈 방어": mental, "성실도": consistency, "자기 객관화": review}
 
 
 def render_radar_chart(scores):
@@ -658,407 +363,8 @@ def render_radar_chart(scores):
     return fig
 
 
-# ==========================================
-# ⏳ [Phase 3] 타임캡슐 — Supabase 버전
-# ==========================================
-def get_past_context(tags):
-    """현재 선택된 태그 중 가장 중요한 감정 태그를 찾아 과거 일기를 소환."""
-    if not tags:
-        return ""
-
-    priority_keywords = ["#뇌동매매반성", "#오늘좀흔들", "#오늘의실수"]
-    core_tag = None
-
-    for t in tags:
-        if any(keyword in t for keyword in priority_keywords):
-            core_tag = t
-            break
-
-    if not core_tag:
-        core_tag = tags[0]
-
-    try:
-        response = (
-            supabase.table("journals")
-            .select("created_at, content")
-            .like("tags", f"%{core_tag}%")
-            .order("created_at", desc=True)
-            .limit(3)
-            .execute()
-        )
-        rows = response.data
-    except Exception:
-        rows = []
-
-    if not rows:
-        return ""
-
-    context = f"\n\n[참고 데이터: 사용자의 과거 '{core_tag}' 관련 기록]\n"
-    for r in rows:
-        date_str = to_kst_str(r["created_at"]).split()[0]
-        context += f"- {date_str}: {r['content']}\n"
-    return context
-
-
 def has_tag(selected_tags, tag_keyword):
     return any(tag_keyword in t for t in selected_tags)
-
-
-# [수정] 새로운 google-genai SDK 규격에 맞춘 안전망 함수
-def safe_generate(contents, config=None, fallback_msg="AI 분석 중 오류가 발생했어요."):
-    """Gemini API 호출 안전망 (google-genai SDK용)"""
-    try:
-        response = ai_client.models.generate_content(
-            model=MODEL_NAME,
-            contents=contents,
-            config=config
-        )
-        if not response.candidates or not getattr(response, 'text', None):
-            return None, "⚠️ AI가 응답을 만들 수 없었어요. (안전 필터에 걸렸거나 빈 응답)"
-        return response.text, None
-    except Exception as e:
-        return None, f"⚠️ {fallback_msg}\n\n상세: `{type(e).__name__}: {e}`"
-
-
-# [변경] 최근 일기 조회 — Supabase 버전 + 사용자별 캐시
-@st.cache_data(ttl=10)
-def get_recent_journals(user_id: str, limit: int = 50):
-    """user_id를 캐시 키에 포함해서 사용자별로 분리된 캐시를 사용."""
-    try:
-        response = (
-            supabase.table("journals")
-            .select("id, created_at, tags, content, ai_feedback")
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return response.data
-    except Exception as e:
-        st.error(f"일기 조회 실패: {e}")
-        return []
-
-
-# ==========================================
-# 📦 [추가] 나의 보물함(재고) 데이터 집계 함수
-# ==========================================
-@st.cache_data(ttl=30)
-def get_real_inventory(user_id: str):
-    """trades 테이블에서 매수/매도 내역을 가져와 종목별 총 수량과 평단가를 정확히 계산합니다."""
-    try:
-        # 배당금을 제외한 모든 내역 (buy, sell, 과거 null 데이터 모두 포함)
-        response = (
-            supabase.table("trades")
-            .select("stock_name, quantity, price, currency, type")
-            .neq("type", "dividend")
-            .execute()
-        )
-        trades = response.data
-
-        if not trades:
-            return []
-
-        inventory_map = {}
-        for t in trades:
-            name = t.get("stock_name")
-            raw_qty = float(t.get("quantity", 0))
-            price = float(t.get("price", 0))
-            currency = t.get("currency", "KRW")
-            trade_type = t.get("type", "buy") # 과거 데이터(null)는 기본값 buy 처리
-
-            if not name or raw_qty == 0:
-                continue
-
-            # 매도(sell)인 경우 수량을 음수로 변환
-            qty = -abs(raw_qty) if trade_type == "sell" else abs(raw_qty)
-
-            if name not in inventory_map:
-                inventory_map[name] = {"현재수량": 0, "총매수수량": 0, "총매수금액": 0, "통화": currency}
-
-            # 평단가 계산 로직 (매수일 때만 금액과 수량을 합산)
-            if qty > 0:
-                inventory_map[name]["총매수수량"] += qty
-                inventory_map[name]["총매수금액"] += (qty * price)
-
-            # 매도/매수 상관없이 실제 현재고 계산
-            inventory_map[name]["현재수량"] += qty
-
-        # UI 출력용 리스트 조립
-        result = []
-        for name, data in inventory_map.items():
-            # 전량 매도되어 잔고가 0 이하가 된 종목은 표시하지 않음
-            if data["현재수량"] > 0:
-                # 총 매수금액 / 총 매수수량으로 평단가 도출
-                avg_price = data["총매수금액"] / data["총매수수량"] if data["총매수수량"] > 0 else 0
-                result.append({
-                    "종목": name,
-                    "수량": data["현재수량"],
-                    "평단가": avg_price,
-                    "통화": data["통화"]
-                })
-        return result
-        
-    except Exception as e:
-        st.error(f"재고 데이터 집계 실패: {e}")
-        return []
-
-
-@st.cache_data(ttl=30)
-def get_dividend_total(user_id: str) -> dict:
-    """배당금 합계 조회. 과거 데이터(quantity)와 신규 데이터(dividend_amount) 모두 호환."""
-    try:
-        response = (
-            supabase.table("trades")
-            # 과거 기록 조회를 위해 quantity도 같이 가져옵니다.
-            .select("quantity, dividend_amount, currency")
-            .eq("type", "dividend")
-            .execute()
-        )
-        totals: dict = {"KRW": 0.0, "USD": 0.0}
-        for t in response.data:
-            cur = t.get("currency", "KRW")
-            # 신규 컬럼값이 있으면 우선 사용, 없으면 과거 quantity 사용
-            amount = t.get("dividend_amount")
-            if amount is None:
-                amount = float(t.get("quantity", 0))
-            
-            totals[cur] = totals.get(cur, 0.0) + float(amount)
-        return totals
-    except Exception:
-        return {"KRW": 0.0, "USD": 0.0}
-
-
-# ==========================================
-# 🧑‍💼 "오늘의 알바생" — 배당금을 알바 노동시간으로 환산
-# ==========================================
-@st.cache_data(ttl=60)
-def get_dividend_work_stats(user_id: str, hourly_wage: int) -> dict:
-    """배당금을 알바 노동시간으로 환산한다.
-
-    Returns:
-        {
-            "total_krw_equiv":     누적 배당의 KRW 환산 총합,
-            "daily_avg_krw":       일 평균 배당(KRW),
-            "daily_work_minutes":  일 평균 알바 시간(분),
-            "total_work_minutes":  누적 알바 시간(분),
-            "days_elapsed":        첫 배당부터 오늘까지 경과 일수,
-            "has_data":            배당 기록 존재 여부,
-        }
-    """
-    empty = {
-        "total_krw_equiv": 0.0,
-        "daily_avg_krw": 0.0,
-        "daily_work_minutes": 0.0,
-        "total_work_minutes": 0.0,
-        "days_elapsed": 0,
-        "has_data": False,
-    }
-    if hourly_wage <= 0:
-        return empty
-
-    try:
-        response = (
-            supabase.table("trades")
-            .select("created_at, quantity, dividend_amount, currency")
-            .eq("type", "dividend")
-            .order("created_at", desc=False)
-            .execute()
-        )
-        rows = response.data
-        if not rows:
-            return empty
-
-        # USD 배당이 있을 때만 환율 조회 (불필요한 API 호출 방지)
-        has_usd = any(r.get("currency") == "USD" for r in rows)
-        usd_to_krw = get_usd_to_krw(_market_time_bucket()) if has_usd else 1.0
-
-        total_krw = 0.0
-        first_date_str = rows[0]["created_at"][:10]   # YYYY-MM-DD
-
-        for r in rows:
-            # 신구 데이터 호환: dividend_amount 우선, 없으면 과거 quantity
-            amount = r.get("dividend_amount")
-            if amount is None:
-                amount = float(r.get("quantity") or 0)
-            cur = r.get("currency", "KRW")
-            krw_value = float(amount) * usd_to_krw if cur == "USD" else float(amount)
-            total_krw += krw_value
-
-        if total_krw <= 0:
-            return empty
-
-        # 기간 계산 (첫 배당일 ~ 오늘, 최소 1일 보정)
-        try:
-            first_date = datetime.date.fromisoformat(first_date_str)
-            days_elapsed = max((datetime.date.today() - first_date).days + 1, 1)
-        except Exception:
-            days_elapsed = 1
-
-        daily_avg_krw = total_krw / days_elapsed
-        total_work_min = (total_krw / hourly_wage) * 60
-        daily_work_min = (daily_avg_krw / hourly_wage) * 60
-
-        return {
-            "total_krw_equiv": total_krw,
-            "daily_avg_krw": daily_avg_krw,
-            "daily_work_minutes": daily_work_min,
-            "total_work_minutes": total_work_min,
-            "days_elapsed": days_elapsed,
-            "has_data": True,
-        }
-    except Exception:
-        return empty
-
-
-def format_work_time(minutes: float) -> str:
-    """분 단위 노동시간을 사람이 읽기 좋은 형태로 변환."""
-    if minutes < 1:
-        return "1분 미만"
-    if minutes < 60:
-        return f"{int(round(minutes))}분"
-    h_total = minutes / 60
-    if h_total < 8:   # 하루 풀타임(8시간) 미만
-        h = int(h_total)
-        m = int(round(minutes - h * 60))
-        return f"{h}시간 {m}분" if m else f"{h}시간"
-    # 8시간 이상은 "일" 단위로
-    days = int(h_total // 8)
-    rem_h = int(round(h_total - days * 8))
-    if rem_h >= 8:   # 반올림 보정
-        days += 1
-        rem_h = 0
-    return f"{days}일 {rem_h}시간 근무" if rem_h else f"{days}일 근무"
-
-
-def render_fire_countdown(monthly_krw: float):
-    """FIRE 마일스톤 카드. monthly_krw: 예상 월 배당수입(원)"""
-    milestones = [
-        (50_000,    "🥚 주말 카페값 자유",   "주말마다 커피 걱정 끝!"),
-        (300_000,   "🐣 고정비 해방",        "통신비 + 넷플릭스 + 헬스장 커버"),
-        (1_000_000, "🐤 하프 은퇴",          "최소 생활비 절반 커버"),
-        (2_000_000, "🦅 완전한 경제적 자유", "이번 달 일 안 해도 됨!"),
-    ]
-
-    prev_goal = 0
-    next_goal, next_label, next_desc = milestones[0]
-    progress = 0.0
-    for goal, label, desc in milestones:
-        if monthly_krw < goal:
-            next_goal, next_label, next_desc = goal, label, desc
-            span = goal - prev_goal
-            progress = (monthly_krw - prev_goal) / span if span > 0 else 0.0
-            break
-        prev_goal = goal
-    else:
-        next_goal, next_label, next_desc = milestones[-1][0], "🎉 FIRE 졸업", "이미 완벽한 경제적 자유를 달성했습니다!"
-        progress = 1.0
-
-    progress = min(max(progress, 0.0), 1.0)
-    remaining = max(next_goal - monthly_krw, 0)
-    achieved = [label for goal, label, _ in milestones if monthly_krw >= goal]
-
-    st.markdown(
-        f'<div style="background:#f8f9fa; border-radius:14px; padding:16px 20px; '
-        f'margin-top:10px; border:1px solid #e9ecef;">'
-        f'<div style="font-size:0.85em; color:#868e96; font-weight:600; margin-bottom:6px;">⏳ FIRE 카운트다운</div>'
-        f'<div style="font-size:1.05em; font-weight:700; color:#339af0; margin-bottom:4px;">{next_label}</div>'
-        f'<div style="font-size:0.83em; color:#666; margin-bottom:8px;">{next_desc}</div>'
-        f'<div style="font-size:0.8em; color:#495057;">'
-        f'예상 월 배당: <b>{monthly_krw:,.0f}원</b>'
-        f'{f" · 목표까지 <b>{remaining:,.0f}원</b>" if remaining > 0 else ""}'
-        f'</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.progress(progress)
-    if achieved:
-        st.caption("달성 완료: " + "  ".join(achieved))
-
-
-def render_family_contributions(portfolio: list):
-    """주식 가족 분담금 카드. portfolio: get_real_inventory() 결과."""
-    try:
-        resp = (
-            supabase.table("trades")
-            .select("stock_name, dividend_amount, quantity, currency")
-            .eq("type", "dividend")
-            .execute()
-        )
-        div_by_stock: dict = {}
-        for r in resp.data:
-            name = r.get("stock_name")
-            amount = float(r.get("dividend_amount") or r.get("quantity") or 0)
-            div_by_stock[name] = div_by_stock.get(name, 0) + amount
-
-        # 포트폴리오 종목 중 배당 기록이 없는 종목 → 취준생으로 표시
-        for item in portfolio:
-            if item["종목"] not in div_by_stock:
-                div_by_stock[item["종목"]] = 0.0
-
-        if not div_by_stock:
-            st.info("아직 가족들이 용돈을 주지 않았어요. 조금 더 기다려볼까요?")
-            return
-
-        sorted_stocks = sorted(div_by_stock.items(), key=lambda x: x[1], reverse=True)
-        total_div = sum(v for _, v in sorted_stocks if v > 0)
-
-        rows_html = ""
-        for idx, (name, amount) in enumerate(sorted_stocks):
-            if amount == 0:
-                role, color = "취준생 둘째 🎧", "#adb5bd"
-                comment = "아직은 무직이지만 열심히 성장 중. 언젠가 일해줄 거예요!"
-                amount_str = "아직 없음"
-                pct_html = ""
-            elif idx == 0:
-                role, color = "든든한 맏형 🧑‍💼", "#339af0"
-                comment = "우리 집 기둥! 가장 많은 생활비를 보태주고 있어요."
-                amount_str = f"{amount:,.0f}원"
-                pct = amount / total_div * 100 if total_div > 0 else 0
-                pct_html = f'<div style="font-size:0.75em;color:#adb5bd;margin-top:3px;">전체 배당의 {pct:.1f}%</div>'
-            elif any(k in name for k in ("KODEX", "TIGER", "ARIRANG", "KBSTAR", "HANARO")):
-                role, color = "야무진 막내 👶", "#51cf66"
-                comment = "매달 꼬박꼬박 잊지 않고 효도하는 중!"
-                amount_str = f"{amount:,.0f}원"
-                pct = amount / total_div * 100 if total_div > 0 else 0
-                pct_html = f'<div style="font-size:0.75em;color:#adb5bd;margin-top:3px;">전체 배당의 {pct:.1f}%</div>'
-            else:
-                role, color = "성실한 식구 👨‍🌾", "#94d82d"
-                comment = "묵묵히 자기 몫의 분담금을 내고 있습니다."
-                amount_str = f"{amount:,.0f}원"
-                pct = amount / total_div * 100 if total_div > 0 else 0
-                pct_html = f'<div style="font-size:0.75em;color:#adb5bd;margin-top:3px;">전체 배당의 {pct:.1f}%</div>'
-
-            rows_html += (
-                f'<div style="padding:12px 16px; margin-bottom:8px; background:#fff; '
-                f'border-radius:10px; border-left:4px solid {color}; '
-                f'box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
-                f'<div style="font-weight:700; color:#212529;">{name} '
-                f'<span style="font-size:0.83em; color:#888; font-weight:400;">({role})</span></div>'
-                f'<div style="display:flex; justify-content:space-between; margin-top:5px; align-items:center;">'
-                f'<span style="font-size:0.82em; color:#666;">{comment}</span>'
-                f'<span style="font-weight:700; color:#2b8a3e; font-size:0.88em;">{amount_str}</span>'
-                f'</div>{pct_html}</div>'
-            )
-
-        st.markdown(rows_html, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"가족 분담금 조회 실패: {e}")
-
-
-def get_daily_meal(daily_avg_krw: float) -> dict:
-    """일 평균 배당금을 보편적인 식사/간식 메뉴로 변환."""
-    if daily_avg_krw < 500:
-        return {"icon": "☕", "menu": "자판기 커피 한 잔", "desc": "작지만 소중한 시작! 식후 커피 한 잔의 여유를 줍니다."}
-    elif daily_avg_krw < 1500:
-        return {"icon": "🍙", "menu": "편의점 삼각김밥", "desc": "바쁠 때 출출함을 달래주는 작지만 확실한 간식입니다."}
-    elif daily_avg_krw < 4000:
-        return {"icon": "🍜", "menu": "컵라면과 바나나맛 우유", "desc": "누구나 좋아하는 최고의 편의점 소울 조합!"}
-    elif daily_avg_krw < 9000:
-        return {"icon": "🍲", "menu": "든든한 국밥 한 그릇", "desc": "한국인의 소울푸드! 든든한 한 끼 식사가 해결됩니다."}
-    elif daily_avg_krw < 15000:
-        return {"icon": "🍱", "menu": "직장인 점심 특선", "desc": "오늘 점심값은 주식이 냈습니다. 식후 아메리카노까지 가능!"}
-    elif daily_avg_krw < 25000:
-        return {"icon": "🍗", "menu": "치킨 한 마리", "desc": "오늘 저녁은 치킨! 배당금이 즐거운 야식을 쏩니다."}
-    else:
-        return {"icon": "🥩", "menu": "프리미엄 소고기 외식", "desc": "축하합니다! 자산이 근사한 외식을 대접하는 수준입니다."}
 
 
 # ==========================================
@@ -1107,55 +413,29 @@ def sync_mentor():
             pass
 
 
+def reset_daily_flow():
+    """일기 입력 플로우를 처음 상태로 초기화."""
+    for k in ['daily_stock_list', 'current_step', 'temp_extracted_data',
+              'processed_image', 'final_result', 'final_error',
+              'balloons_shown', 'toast_shown', 'current_tags', 'chat_messages']:
+        st.session_state.pop(k, None)
+    st.session_state['uploader_key'] = st.session_state.get('uploader_key', 0) + 1
+
+
 with tab1:
+    if st.button("🔄 처음 상태로 초기화", key="global_reset"):
+        reset_daily_flow()
+        st.rerun()
+
+    st.markdown("---")
     # ==========================================
     # 🦇 [신규] 동굴 모드 (Zen Mode) 스위치
     # ==========================================
     zen_mode = st.toggle(
-        "🦇 동굴 모드 켜기",
-        value=False,
+        "🦇 동굴 모드 켜기", 
+        value=False, 
         help="시장이 폭락해 멘탈이 흔들릴 때 켜세요. 모든 수익률과 숫자를 가려줍니다."
     )
-
-    # ---------------------------------------------------------
-    # 🌤️ 증시 날씨판 — zen_mode 일 땐 숨김
-    # ---------------------------------------------------------
-    if not zen_mode:
-        _weather = get_market_weather(time_bucket=_market_time_bucket())
-        _weather_items = list(_weather.items())
-        _row1, _row2 = _weather_items[:2], _weather_items[2:]
-        for _row in (_row1, _row2):
-            _cols = st.columns(2)
-            for _col, (name, data) in zip(_cols, _row):
-                with _col:
-                    if data:
-                        pct = data["change_pct"]
-                        curr = data["current"]
-                        if pct > 0:
-                            color, icon, arrow = "#e03131", "☀️", "▲"
-                        elif pct < 0:
-                            color, icon, arrow = "#1c7ed6", "☔", "▼"
-                        else:
-                            color, icon, arrow = "#868e96", "☁️", "–"
-                        st.markdown(
-                            f'<div style="background:#f8f9fa; border-radius:10px; padding:12px; '
-                            f'text-align:center; border:1px solid #e9ecef; margin-bottom:8px;">'
-                            f'<div style="font-size:0.8em; color:#495057; font-weight:600;">{name} {icon}</div>'
-                            f'<div style="font-size:1.15em; font-weight:800; margin:4px 0;">{curr:,.2f}</div>'
-                            f'<div style="font-size:0.9em; font-weight:700; color:{color};">'
-                            f'{arrow} {abs(pct):.2f}%</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f'<div style="background:#f8f9fa; border-radius:10px; padding:12px; '
-                            f'text-align:center; border:1px solid #e9ecef; margin-bottom:8px;">'
-                            f'<div style="font-size:0.8em; color:#495057; font-weight:600;">{name}</div>'
-                            f'<div style="font-size:0.85em; color:#adb5bd; margin-top:8px;">💤 수신 지연</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-        st.markdown("<div style='margin-bottom:4px;'></div>", unsafe_allow_html=True)
 
     # ---------------------------------------------------------
     # 📱 1. 오늘의 멘토 설정 (아코디언)
@@ -1209,7 +489,7 @@ with tab1:
         
     else:
         # [핵심] 가짜 데이터 대신 Supabase DB에서 집계된 진짜 재고를 불러옴
-        my_portfolio = get_real_inventory(st.session_state["user_id"])
+        my_portfolio = get_real_inventory(st.session_state["user_id"], supabase)
 
         if not my_portfolio:
             st.info("아직 텅 비어있네요! 💸 이번 달은 삼성전자나 Alphabet 같은 든든한 자산을 모아 첫 기록을 남겨보는 건 어떨까요?")
@@ -1305,7 +585,7 @@ with tab1:
             st.caption("💡 '티커 미등록' 종목은 app.py의 TICKER_MAP에 야후파이낸스 코드를 추가하면 실시간 연동됩니다.")
 
             # ── 누적 배당금 요약 ─────────────────────────────────────
-            div_totals = get_dividend_total(st.session_state["user_id"])
+            div_totals = get_dividend_total(st.session_state["user_id"], supabase)
             div_parts = []
             if div_totals.get("KRW", 0) > 0:
                 div_parts.append(f"🇰🇷 {div_totals['KRW']:,.0f}원")
@@ -1318,121 +598,6 @@ with tab1:
                     f'🍯 누적 배당금: <b>{" + ".join(div_parts)}</b></div>',
                     unsafe_allow_html=True
                 )
-
-            # ============================================================
-            # 🧑‍💼 오늘의 알바생 — 배당금을 노동시간으로 환산
-            # ============================================================
-            _active_wage = _get_active_wage()
-            work_stats = get_dividend_work_stats(
-                st.session_state["user_id"],
-                _active_wage,
-            )
-
-            if not work_stats["has_data"]:
-                # 빈 상태: 첫 배당 들어오기 전
-                st.markdown(
-                    '<div style="background: linear-gradient(135deg, #F1F5F915, #E2E8F015); '
-                    'border:1px dashed #CBD5E1; border-radius:14px; padding:14px 18px; margin-top:10px;">'
-                    '<div style="font-size:0.85em; color:#64748B;">🧑‍💼 오늘의 알바생</div>'
-                    '<div style="font-size:0.95em; margin-top:4px; color:#94A3B8;">'
-                    '아직 잠자고 있어요 💤  첫 배당이 들어오면 일을 시작합니다.'
-                    '</div></div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                daily_min = work_stats["daily_work_minutes"]
-                total_min = work_stats["total_work_minutes"]
-                daily_krw = work_stats["daily_avg_krw"]
-                elapsed   = work_stats["days_elapsed"]
-
-                # 일 평균 워딩 — 작은 숫자에도 의미 주기
-                if daily_min < 3:
-                    daily_phrase = "잠깐 심부름 다녀온 정도"
-                    emoji = "🚶"
-                elif daily_min < 15:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 알바 완료"
-                    emoji = "🧑‍🔧"
-                elif daily_min < 60:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 알바 뛰어줌"
-                    emoji = "💼"
-                elif daily_min < 240:   # 4시간 미만
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 파트타임 근무"
-                    emoji = "🏃"
-                elif daily_min < 480:   # 8시간 미만
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 풀타임에 근접"
-                    emoji = "🔥"
-                else:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 정직원급 근무"
-                    emoji = "🚀"
-
-                wage_note = (
-                    f"본인 시급 {_active_wage:,}원 기준"
-                    if _active_wage != KR_MIN_WAGE_2026
-                    else f"2026년 최저시급 {KR_MIN_WAGE_2026:,}원 기준"
-                )
-
-                st.markdown(
-                    f'<div style="background: linear-gradient(135deg, #EEF2FF, #FAF5FF); '
-                    f'border-radius:14px; padding:16px 20px; margin-top:10px;">'
-                    f'<div style="font-size:0.85em; color:#6366F1; font-weight:600;">'
-                    f'{emoji} 오늘의 알바생</div>'
-                    f'<div style="font-size:1.08em; margin-top:6px; color:#1E293B; line-height:1.5;">'
-                    f'내 주식이 매일 평균 {daily_phrase}'
-                    f'</div>'
-                    f'<div style="font-size:0.78em; color:#64748B; margin-top:8px;">'
-                    f'일 평균 {daily_krw:,.0f}원  ·  누적 노동시간 '
-                    f'<b>{format_work_time(total_min)}</b>  ·  {elapsed}일째 출근 중'
-                    f'</div>'
-                    f'<div style="font-size:0.72em; color:#94A3B8; margin-top:4px;">'
-                    f'{wage_note}'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-                # 본인 시급 설정 (선택)
-                with st.expander("⚙️ 내 시급으로 환산하기", expanded=False):
-                    st.caption(
-                        "본인의 실제 시급을 기준으로 환산하면 임팩트가 훨씬 커집니다. "
-                        "영구 저장하려면 `.streamlit/secrets.toml`에 "
-                        "`MY_HOURLY_WAGE = 25000` 같이 추가하세요."
-                    )
-                    new_wage = st.number_input(
-                        "이번 세션에서만 적용할 시급(원)",
-                        min_value=1_000,
-                        max_value=500_000,
-                        value=_active_wage,
-                        step=500,
-                        key="custom_wage_input",
-                    )
-                    if st.button("이 세션에 적용", key="apply_custom_wage"):
-                        get_dividend_work_stats.clear()
-                        st.session_state["_custom_wage"] = new_wage
-                        st.rerun()
-
-                # ── 자산이 차린 식탁 ──────────────────────────────────
-                meal = get_daily_meal(daily_krw)
-                st.markdown(
-                    f'<div style="background:linear-gradient(135deg,#ffffff,#f8f9fa); '
-                    f'border-radius:14px; padding:16px 20px; margin-top:10px; border:1px solid #e9ecef;">'
-                    f'<div style="font-size:0.85em; color:#868e96; font-weight:600;">🍽️ 오늘의 자산 식탁</div>'
-                    f'<div style="text-align:center; margin:10px 0;">'
-                    f'<div style="font-size:2.4rem;">{meal["icon"]}</div>'
-                    f'<div style="font-size:1.05em; font-weight:700; color:#212529; margin-top:6px;">{meal["menu"]}</div>'
-                    f'<div style="font-size:0.85em; color:#495057; margin-top:5px;">{meal["desc"]}</div>'
-                    f'</div>'
-                    f'<div style="border-top:1px dashed #dee2e6; padding-top:8px; text-align:center; '
-                    f'font-size:0.82em; color:#868e96;">'
-                    f'일 평균 배당: <b style="color:#339af0;">{daily_krw:,.0f}원</b>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-                # ── FIRE 카운트다운 ────────────────────────────────────
-                render_fire_countdown(daily_krw * 30.4)
-
-            # ── 가족 분담금 (배당 있는 경우에만) ─────────────────────
-            with st.expander("🏠 우리 집 주식 가족 분담금", expanded=False):
-                render_family_contributions(my_portfolio)
 
         # ── 배당금 직접 기록 폼 ──────────────────────────────────────
         with st.expander("🍯 배당금 직접 기록하기", expanded=False):
@@ -1448,13 +613,12 @@ with tab1:
                 if div_submit and div_stock and div_amount > 0:
                     try:
                         supabase.table("trades").insert({
-                            "user_id":         st.session_state["user_id"],
-                            "stock_name":      div_stock.strip(),
-                            "quantity":        0.0, # 더 이상 배당금을 수량에 욱여넣지 않음
-                            "price":           0.0, # 더미 값 제거
-                            "currency":        div_currency,
-                            "type":            "dividend",
-                            "dividend_amount": div_amount # 신규 컬럼에 명확히 적재
+                            "user_id":    st.session_state["user_id"],
+                            "stock_name": div_stock.strip(),
+                            "quantity":   div_amount,
+                            "price":      1.0,
+                            "currency":   div_currency,
+                            "type":       "dividend",
                         }).execute()
                         get_dividend_total.clear()
                         _sym = "원" if div_currency == "KRW" else "$"
@@ -1582,14 +746,10 @@ with tab1:
 
 위 대화 흐름에 자연스럽게 이어지도록, 사용자의 가장 최근 메시지에 답해주세요."""
 
-                # [변경 후]
-                config = types.GenerateContentConfig(
-                    system_instruction=system_instruction
-                )
-                
+                model = genai.GenerativeModel(MODEL_NAME, system_instruction=system_instruction)
                 response_text, err = safe_generate(
-                    contents=user_input.strip(),
-                    config=config,
+                    model,
+                    user_input.strip(),
                     fallback_msg="답변 생성 중 오류가 발생했어요."
                 )
 
@@ -1633,13 +793,16 @@ with tab1:
 
             if st.button("✅ 가림막 설정 완료 및 정보 추출"):
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
-                    # [변경 후]
-                    config = types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema={
-                            "type": "OBJECT",
-                            "additionalProperties": {"type": "NUMBER"},
-                        }
+                    # Structured Outputs — {"종목명": 수량} 형태의 JSON만 강제 반환
+                    extract_model = genai.GenerativeModel(
+                        MODEL_NAME,
+                        generation_config=genai.GenerationConfig(
+                            response_mime_type="application/json",
+                            response_schema={
+                                "type": "object",
+                                "additionalProperties": {"type": "number"},
+                            },
+                        ),
                     )
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
@@ -1647,13 +810,16 @@ with tab1:
                         "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해."
                     )
 
-                    text, err = safe_generate(
-                        contents=[extract_prompt, image], 
-                        config=config,
-                        fallback_msg="이미지 분석 중 오류가 발생했어요."
-                    )
+                    text, err = safe_generate(extract_model, [extract_prompt, image],
+                                              fallback_msg="이미지 분석 중 오류가 발생했어요.")
 
                     if err:
+                        logger.warning(
+                            "OCR 실패 — size=%s, file_size=%s bytes, raw_err=%s",
+                            image.size,
+                            uploaded_file.size,
+                            err,
+                        )
                         st.error(err)
                         st.info("잠시 후 다시 시도하거나, 아래의 '직접 입력'을 사용해주세요.")
                     else:
@@ -1690,13 +856,13 @@ with tab1:
         try:
             ai_text = st.session_state.get('temp_extracted_data', '{}')
             # Structured Outputs 덕분에 순수 JSON이 보장됨 — 정규표현식 불필요
-            extracted_dict = json.loads(ai_text.strip())
+            extracted_dict = json.loads(ai_text.strip() or "{}")
             extracted_dict = {k: float(v) for k, v in extracted_dict.items()}
         except Exception as e:
             st.error(f"AI 응답 파싱 실패 ({e}).")
             extracted_dict = {}
 
-        current_inventory = {item["종목"]: item["수량"] for item in get_real_inventory(st.session_state["user_id"])}
+        current_inventory = {item["종목"]: item["수량"] for item in get_real_inventory(st.session_state["user_id"], supabase)}
 
         # AI가 인식한 종목에 대해서만 변동 추적
         # (사진에 없는 종목은 스크롤 미캡처 가능성이 있으므로 전량 매도로 간주하지 않음)
@@ -1825,7 +991,7 @@ with tab1:
 
                 system_instruction = base_instruction
 
-                past_records = get_past_context(selected_tags)
+                past_records = get_past_context(selected_tags, supabase)
                 if past_records:
                     system_instruction += past_records
 
@@ -1858,8 +1024,7 @@ with tab1:
                   "extracted_trades": [
                     {{
                       "stock_name": "삼성전자",
-                      "quantity": 10,
-                      "type": "buy" // 매수는 "buy", 매도는 "sell" 로 정확히 기재하세요.
+                      "quantity": 10
                     }}
                   ]
                 }}
@@ -1878,27 +1043,24 @@ with tab1:
                 * 주의사항 3: extracted_trades의 각 항목에는 stock_name과 quantity만 포함하면 됩니다.
                 """
 
-                # [변경 후]
-                config = types.GenerateContentConfig(
+                model = genai.GenerativeModel(
+                    MODEL_NAME,
                     system_instruction=system_instruction,
-                    response_mime_type="application/json"
+                    generation_config={"response_mime_type": "application/json"}
                 )
 
                 tag_text = " ".join(selected_tags) if selected_tags else ""
                 final_prompt = f"태그: {tag_text}\n\n사용자가 오늘 다음 종목들을 매수/확인했습니다:\n{all_data_str}\n\n이 내역을 바탕으로 전체적인 투자 평과 멘탈 관리 조언을 해줘."
 
-                final_text, err = safe_generate(
-                    contents=final_prompt,
-                    config=config,
-                    fallback_msg="최종 피드백 생성 중 오류가 발생했어요."
-                )
+                final_text, err = safe_generate(model, final_prompt,
+                                                fallback_msg="최종 피드백 생성 중 오류가 발생했어요.")
 
                 if err:
                     st.session_state['final_error'] = err
                 else:
                     try:
                         # response_mime_type="application/json" 덕분에 순수 JSON이 보장됨
-                        ai_data = json.loads(final_text.strip())
+                        ai_data = json.loads(final_text.strip() or "{}")
                         
                         ai_feedback = ai_data.get("ai_feedback", "기록이 저장되었습니다.")
                         extracted_trades = ai_data.get("extracted_trades", [])
@@ -1928,18 +1090,16 @@ with tab1:
                             for trade in extracted_trades:
                                 ticker = trade["_ticker"]
                                 if ticker:
-                                    real_price = bulk_trade_prices.get(ticker) or 0.0
+                                    real_price = bulk_trade_prices.get(ticker)  # None if unavailable
                                     currency   = "KRW" if ticker.endswith(".KS") else "USD"
                                 else:
-                                    real_price = 0.0
+                                    real_price = None
                                     currency   = "KRW"
-                                
                                 trades_to_insert.append({
                                     "stock_name": trade["_normalized_name"],
-                                    "quantity":   abs(trade["quantity"]), # 수량은 무조건 절대값으로 DB 저장
+                                    "quantity":   trade["quantity"],
                                     "price":      real_price,
                                     "currency":   currency,
-                                    "type":       trade.get("type", "buy") # AI가 판별한 buy 또는 sell 저장
                                 })
 
                         # ==========================================
@@ -1980,11 +1140,7 @@ with tab1:
             st.markdown(st.session_state['final_result'], unsafe_allow_html=True)
 
         if st.button("🔄 처음으로 돌아가기"):
-            st.session_state['uploader_key'] = st.session_state.get('uploader_key', 0) + 1
-            for key in ['daily_stock_list', 'current_step', 'temp_extracted_data', 'balloons_shown',
-                        'toast_shown', 'processed_image', 'current_tags', 'chat_messages',
-                        'final_result', 'final_error']:
-                st.session_state.pop(key, None)
+            reset_daily_flow()
             st.rerun()
 
     # ==========================================
@@ -1997,7 +1153,7 @@ with tab1:
     if zen_mode:
         st.info("🌿 **동굴 모드 작동 중**\n\n현재 점수와 능력치 차트를 숨겨두었습니다. 흔들리지 않는 멘탈이 가장 중요합니다.")
     else:
-        current_scores = calculate_scores()
+        current_scores = calculate_scores(supabase)
         radar_fig = render_radar_chart(current_scores)
         st.plotly_chart(radar_fig, use_container_width=True)
         st.info(f"🔥 현재 연속 기록(Streak): **{int(current_scores['성실도'] // 3.3)}일**")
@@ -2008,7 +1164,7 @@ with tab2:
     st.header("📚 나의 투자 기록장")
 
     # [변경] user_id를 캐시 키로 전달
-    rows = get_recent_journals(st.session_state["user_id"])
+    rows = get_recent_journals(st.session_state["user_id"], supabase)
 
     if not rows:
         st.info("아직 작성된 일기가 없어요. 첫 일기를 작성해보세요!")
@@ -2055,28 +1211,6 @@ with tab2:
 #   대신 사용자가 본인 데이터를 언제든 추출/이전 가능하게 함
 with tab3:
     st.header("⚙️ 설정 및 데이터 관리")
-
-    # 비밀번호 변경 (로그인 상태)
-    st.markdown("### 🔑 비밀번호 변경")
-    with st.form("change_pw_form", clear_on_submit=True):
-        cp_new = st.text_input("새 비밀번호", type="password", placeholder="6자리 이상")
-        cp_new2 = st.text_input("새 비밀번호 확인", type="password")
-        cp_btn = st.form_submit_button("🔒 변경하기", type="primary")
-    if cp_btn:
-        if not cp_new or not cp_new2:
-            st.warning("모든 항목을 입력해주세요.")
-        elif cp_new != cp_new2:
-            st.error("❌ 비밀번호가 일치하지 않습니다.")
-        elif len(cp_new) < 6:
-            st.warning("6자리 이상으로 설정해주세요.")
-        else:
-            try:
-                supabase.auth.update_user({"password": cp_new})
-                st.success("✅ 비밀번호가 변경되었습니다.")
-            except Exception as e:
-                st.error(f"변경 실패: {e}")
-
-    st.markdown("---")
 
     st.markdown("### 💾 내 일기 데이터 내보내기")
     st.caption("내 모든 일기와 AI 피드백을 JSON 파일로 받아갈 수 있습니다. (백업, 다른 도구로 이전 등)")
