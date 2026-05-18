@@ -1,6 +1,5 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 import os
 import json
 import re
@@ -1176,12 +1175,15 @@ with tab1:
             if st.button("✅ 가림막 설정 완료 및 정보 추출"):
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
                     # Structured Outputs — {"종목명": 수량} 형태의 JSON만 강제 반환
-                    config = types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema={
-                            "type": "OBJECT",
-                            "additionalProperties": {"type": "NUMBER"},
-                        }
+                    extract_model = genai.GenerativeModel(
+                        MODEL_NAME,
+                        generation_config=genai.GenerationConfig(
+                            response_mime_type="application/json",
+                            response_schema={
+                                "type": "object",
+                                "additionalProperties": {"type": "number"},
+                            },
+                        ),
                     )
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
@@ -1189,13 +1191,9 @@ with tab1:
                         "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해."
                     )
 
-                    text, err = safe_generate(
-                        client=ai_client, 
-                        model_name=MODEL_NAME, 
-                        contents=[extract_prompt, image],
-                        config=config,
-                        fallback_msg="이미지 분석 중 오류가 발생했어요."
-                    )
+                    text, err = safe_generate(extract_model, [extract_prompt, image],
+                                              fallback_msg="이미지 분석 중 오류가 발생했어요.")
+                
 
                     if err:
                         st.error(err)
