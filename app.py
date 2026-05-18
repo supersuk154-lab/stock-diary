@@ -7,7 +7,7 @@ import math
 import datetime
 from datetime import timezone, timedelta
 from pathlib import Path
-from prices import TICKER_MAP, get_realtime_prices_bulk, get_realtime_price, get_usd_to_krw, _market_time_bucket
+from prices import get_realtime_prices_bulk, get_realtime_price, get_usd_to_krw, _market_time_bucket, resolve_ticker, load_krx_ticker_map
 
 
 # [변경] 이미지 처리 라이브러리는 그대로
@@ -787,10 +787,10 @@ with tab1:
         if not my_portfolio:
             st.info("아직 텅 비어있네요! 💸 첫 매수 기록을 남겨보세요.")
         else:
-            # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 TICKER_MAP 폴백)
+            # 필요한 티커를 모아 한 번에 일괄 조회 (DB ticker 우선, 없으면 pykrx 동적 맵 폴백)
             all_tickers = tuple(
                 t for t in (
-                    item.get("티커") or TICKER_MAP.get(item["종목"])
+                    item.get("티커") or resolve_ticker(item["종목"])
                     for item in my_portfolio
                 ) if t
             )
@@ -804,7 +804,7 @@ with tab1:
             all_priced = True
             item_values = {}  # 종목별 평가금액(KRW 환산) — 비중 계산용
             for _item in my_portfolio:
-                _ticker = _item.get("티커") or TICKER_MAP.get(_item["종목"])
+                _ticker = _item.get("티커") or resolve_ticker(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
                 _qty = _item["수량"]
                 _avg = _item["평단가"]
@@ -830,7 +830,7 @@ with tab1:
                 my_portfolio = sorted(my_portfolio, key=lambda x: item_values.get(x["종목"], 0), reverse=True)
             elif sort_key == "수익률순":
                 def _rate(item):
-                    ticker = item.get("티커") or TICKER_MAP.get(item["종목"])
+                    ticker = item.get("티커") or resolve_ticker(item["종목"])
                     cp = bulk_prices.get(ticker) if ticker else None
                     if cp and item["평단가"] > 0:
                         return (cp - item["평단가"]) / item["평단가"]
@@ -862,7 +862,7 @@ with tab1:
             # ── 종목 카드 목록 ────────────────────────────────────────
             rows_html = ""
             for item in my_portfolio:
-                ticker = item.get("티커") or TICKER_MAP.get(item["종목"])
+                ticker = item.get("티커") or resolve_ticker(item["종목"])
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
                 is_krw = item["통화"] == "KRW"
@@ -1444,11 +1444,7 @@ with tab1:
                             for trade in extracted_trades:
                                 raw_name   = trade["stock_name"]
                                 normalized = " ".join(raw_name.split())
-                                ticker     = TICKER_MAP.get(normalized) or TICKER_MAP.get(raw_name)
-                                if not ticker:
-                                    hint = (trade.get("ticker_hint") or "").strip()
-                                    if hint:
-                                        ticker = hint
+                                ticker     = resolve_ticker(normalized, trade.get("ticker_hint") or "")
                                 trade["_normalized_name"] = normalized
                                 trade["_ticker"]          = ticker
                                 if ticker:
