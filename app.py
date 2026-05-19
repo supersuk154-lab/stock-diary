@@ -199,12 +199,42 @@ toss_style = """
 
     /* [최적화] 모바일 기기 특화 스타일 (화면 폭 600px 이하) */
     @media (max-width: 600px) {
-        h1 {
-            font-size: 1.8rem !important;
+        /* 메인 타이틀 (h1) */
+        .stMarkdown h1, h1 {
+            font-size: 1.5rem !important;
+            letter-spacing: -0.5px !important;
+            word-break: keep-all !important;
+            line-height: 1.3 !important;
         }
+
+        /* 서브 타이틀 (h2) */
+        .stMarkdown h2, h2 {
+            font-size: 1.25rem !important;
+            letter-spacing: -0.3px !important;
+            word-break: keep-all !important;
+        }
+
+        /* 소제목 (h3) */
+        .stMarkdown h3, h3 {
+            font-size: 1.1rem !important;
+            word-break: keep-all !important;
+        }
+
+        /* 본문 패딩 축소 */
         .block-container {
             padding-left: 1rem !important;
             padding-right: 1rem !important;
+        }
+
+        /* 탭 버튼 텍스트 크기 */
+        div[data-testid="stTabs"] button[data-baseweb="tab"] {
+            font-size: 0.85rem !important;
+            padding: 10px 4px !important;
+        }
+
+        /* 업로더 텍스트 크기 줄이기 */
+        [data-testid="stFileUploader"] label {
+            font-size: 0.9rem !important;
         }
     }
 </style>
