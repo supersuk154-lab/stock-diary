@@ -213,7 +213,7 @@ st.markdown(toss_style, unsafe_allow_html=True)
 # ---------------------------------------------------------
 
 # [수정] 지정하신 최신 고속 모델로 변경
-MODEL_NAME = "gemini-2.0-flash-lite"
+MODEL_NAME = "gemini-2.0-flash"
 
 # ==========================================
 # 🔐 [변경] 비밀키 로드 — st.secrets 사용
