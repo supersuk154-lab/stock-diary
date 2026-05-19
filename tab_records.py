@@ -1,13 +1,30 @@
 import streamlit as st
 import html
-from db import to_kst_str, get_recent_journals
-from ui_components import card, banner, sanitize_html
+from db import to_kst_str, get_recent_journals, calculate_scores
+from ui_components import card, banner, sanitize_html, render_radar_chart
 
 def render_records_tab(supabase):
     st.markdown("### 📚 나의 투자 기록장")
     st.markdown("<p style='color: #4E5968; font-size: 0.95em;'>과거에 기록한 일기와 AI 멘토의 피드백을 모아볼 수 있습니다.</p>", unsafe_allow_html=True)
 
     user_id = st.session_state.get("user_id")
+
+    # ── 최근 30일 투자 성과 브리핑 ──────────────────────
+    if user_id:
+        with st.expander("📊 최근 30일 나의 투자 성과 브리핑", expanded=False):
+            st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>최근 30일 동안의 기록 패턴을 분석한 결과입니다.</p>", unsafe_allow_html=True)
+            try:
+                current_scores = calculate_scores(supabase, user_id)
+            except Exception as e:
+                st.warning(f"점수 조회 실패: {e}")
+                current_scores = {"원칙 준수": 0, "멘탈 방어": 0, "성실도": 0, "자기 객관화": 0}
+            radar_fig = render_radar_chart(current_scores)
+            st.plotly_chart(radar_fig, use_container_width=True)
+            streak_days = int(current_scores.get("성실도", 0) // 3.3)
+            if streak_days > 0:
+                banner(f"🔥 현재 <b>{streak_days}일 연속</b> 기록 중입니다! 멋진 페이스를 보여주고 계시네요.", type="info")
+
+    st.markdown("<div style='margin:16px 0'></div>", unsafe_allow_html=True)
     if not user_id:
         banner("로그인이 필요합니다.", type="warning")
         return

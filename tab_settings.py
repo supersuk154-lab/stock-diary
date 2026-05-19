@@ -84,7 +84,25 @@ def render_settings_tab(supabase):
     """
     card("안전한 데이터 보관 환경", security_info, icon="🔒")
 
-    # 4. 계정 데이터 영구 삭제
+    # 4. 앱 사용 방법 안내
+    st.markdown("---")
+    st.markdown("#### 📖 사용 방법")
+    with st.expander("앱 사용 방법 보기", expanded=False):
+        st.info("""
+        **1. 데이터 기록 (Track 1)**
+        - MTS 매매 내역이나 잔고를 캡처해 올리세요.
+        - AI가 종목과 수량을 읽어 데이터로 저장합니다.
+        - 장기 투자 성과를 숫자로 확인하세요.
+        """)
+        st.success("""
+        **2. 멘탈 관리 (Track 2)**
+        - 시장이 흔들려 불안할 때 태그를 누르세요.
+        - "무섭다", "팔고 싶다" 등 짧은 감정을 쓰세요.
+        - AI 멘토가 과거 기록을 바탕으로 처방을 내립니다.
+        """)
+        st.caption("💡 Tip: 매일 사진을 올릴 필요는 없습니다. 매매가 없는 날엔 태그 하나와 짧은 생각만 남겨보세요.")
+
+    # 5. 계정 데이터 영구 삭제
     st.markdown("---")
     st.markdown("<h4 style='color: #E03131;'>⚠️ 계정 데이터 삭제</h4>", unsafe_allow_html=True)
     st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>이 작업은 복구가 불가능합니다. 신중히 결정해 주세요.</p>", unsafe_allow_html=True)

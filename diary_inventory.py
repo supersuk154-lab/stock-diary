@@ -369,112 +369,104 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool):
                     unsafe_allow_html=True
                 )
     
-            # 오늘의 알바생
-            _active_wage = _get_active_wage()
-            work_stats = get_dividend_work_stats(
-                user_id,
-                _active_wage,
-                supabase,
-            )
-    
-            if not work_stats["has_data"]:
-                st.markdown(
-                    '<div style="background: linear-gradient(135deg, #F1F5F915, #E2E8F015); '
-                    'border:1px dashed #CBD5E1; border-radius:14px; padding:14px 18px; margin-top:10px;">'
-                    '<div style="font-size:0.85em; color:#64748B;">🧑‍💼 오늘의 알바생</div>'
-                    '<div style="font-size:0.95em; margin-top:4px; color:#94A3B8;">'
-                    '아직 잠자고 있어요 💤  첫 배당이 들어오면 일을 시작합니다.'
-                    '</div></div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                daily_min = work_stats["daily_work_minutes"]
-                total_min = work_stats["total_work_minutes"]
-                daily_krw = work_stats["daily_avg_krw"]
-                elapsed   = work_stats["days_elapsed"]
-    
-                if daily_min < 3:
-                    daily_phrase = "잠깐 심부름 다녀온 정도"
-                    emoji = "🚶"
-                elif daily_min < 15:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 알바 완료"
-                    emoji = "🧑‍🔧"
-                elif daily_min < 60:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 알바 뛰어줌"
-                    emoji = "💼"
-                elif daily_min < 240:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 파트타임 근무"
-                    emoji = "🏃"
-                elif daily_min < 480:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 풀타임에 근접"
-                    emoji = "🔥"
+            # ── 게이미피케이션 요소: 하나의 토글로 통합 ──────
+            with st.expander("🎮 내 자산이 일하는 중 (상세 보기)", expanded=False):
+                _active_wage = _get_active_wage()
+                work_stats = get_dividend_work_stats(user_id, _active_wage, supabase)
+
+                if not work_stats["has_data"]:
+                    st.markdown(
+                        '<div style="background: linear-gradient(135deg, #F1F5F915, #E2E8F015); '
+                        'border:1px dashed #CBD5E1; border-radius:14px; padding:14px 18px; margin-top:10px;">'
+                        '<div style="font-size:0.85em; color:#64748B;">🧑‍💼 오늘의 알바생</div>'
+                        '<div style="font-size:0.95em; margin-top:4px; color:#94A3B8;">'
+                        '아직 잠자고 있어요 💤  첫 배당이 들어오면 일을 시작합니다.'
+                        '</div></div>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    daily_phrase = f"<b>{format_work_time(daily_min)}</b> 정직원급 근무"
-                    emoji = "🚀"
-    
-                wage_note = (
-                    f"본인 시급 {_active_wage:,}원 기준"
-                    if _active_wage != KR_MIN_WAGE_2026
-                    else f"2026년 최저시급 {KR_MIN_WAGE_2026:,}원 기준"
-                )
-    
-                st.markdown(
-                    f'<div style="background: linear-gradient(135deg, #EEF2FF, #FAF5FF); '
-                    f'border-radius:14px; padding:16px 20px; margin-top:10px;">'
-                    f'<div style="font-size:0.85em; color:#6366F1; font-weight:600;">'
-                    f'{emoji} 오늘의 알바생</div>'
-                    f'<div style="font-size:1.08em; margin-top:6px; color:#1E293B; line-height:1.5;">'
-                    f'내 주식이 매일 평균 {daily_phrase}'
-                    f'</div>'
-                    f'<div style="font-size:0.78em; color:#64748B; margin-top:8px;">'
-                    f'일 평균 {daily_krw:,.0f}원  ·  누적 노동시간 '
-                    f'<b>{format_work_time(total_min)}</b>  ·  {elapsed}일째 출근 중'
-                    f'</div>'
-                    f'<div style="font-size:0.72em; color:#94A3B8; margin-top:4px;">'
-                    f'{wage_note}'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-    
-                with st.expander("⚙️ 내 시급으로 환산하기", expanded=False):
-                    st.caption(
-                        "본인의 실제 시급을 기준으로 환산하면 임팩트가 훨씬 커집니다. "
-                        "영구 저장하려면 `.streamlit/secrets.toml`에 "
-                        "`MY_HOURLY_WAGE = 25000` 같이 추가하세요."
+                    daily_min = work_stats["daily_work_minutes"]
+                    total_min = work_stats["total_work_minutes"]
+                    daily_krw = work_stats["daily_avg_krw"]
+                    elapsed   = work_stats["days_elapsed"]
+
+                    if daily_min < 3:
+                        daily_phrase, emoji = "잠깐 심부름 다녀온 정도", "🚶"
+                    elif daily_min < 15:
+                        daily_phrase, emoji = f"<b>{format_work_time(daily_min)}</b> 알바 완료", "🧑‍🔧"
+                    elif daily_min < 60:
+                        daily_phrase, emoji = f"<b>{format_work_time(daily_min)}</b> 알바 뛰어줌", "💼"
+                    elif daily_min < 240:
+                        daily_phrase, emoji = f"<b>{format_work_time(daily_min)}</b> 파트타임 근무", "🏃"
+                    elif daily_min < 480:
+                        daily_phrase, emoji = f"<b>{format_work_time(daily_min)}</b> 풀타임에 근접", "🔥"
+                    else:
+                        daily_phrase, emoji = f"<b>{format_work_time(daily_min)}</b> 정직원급 근무", "🚀"
+
+                    wage_note = (
+                        f"본인 시급 {_active_wage:,}원 기준"
+                        if _active_wage != KR_MIN_WAGE_2026
+                        else f"2026년 최저시급 {KR_MIN_WAGE_2026:,}원 기준"
                     )
-                    new_wage = st.number_input(
-                        "이번 세션에서만 적용할 시급(원)",
-                        min_value=1_000,
-                        max_value=500_000,
-                        value=_active_wage,
-                        step=500,
-                        key="custom_wage_input",
+
+                    st.markdown(
+                        f'<div style="background: linear-gradient(135deg, #EEF2FF, #FAF5FF); '
+                        f'border-radius:14px; padding:16px 20px; margin-top:10px;">'
+                        f'<div style="font-size:0.85em; color:#6366F1; font-weight:600;">'
+                        f'{emoji} 오늘의 알바생</div>'
+                        f'<div style="font-size:1.08em; margin-top:6px; color:#1E293B; line-height:1.5;">'
+                        f'내 주식이 매일 평균 {daily_phrase}'
+                        f'</div>'
+                        f'<div style="font-size:0.78em; color:#64748B; margin-top:8px;">'
+                        f'일 평균 {daily_krw:,.0f}원  ·  누적 노동시간 '
+                        f'<b>{format_work_time(total_min)}</b>  ·  {elapsed}일째 출근 중'
+                        f'</div>'
+                        f'<div style="font-size:0.72em; color:#94A3B8; margin-top:4px;">'
+                        f'{wage_note}'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
                     )
-                    if st.button("이 세션에 적용", key="apply_custom_wage"):
-                        get_dividend_work_stats.clear()
-                        st.session_state["_custom_wage"] = new_wage
-                        st.rerun()
-    
-                meal = get_daily_meal(daily_krw)
-                st.markdown(
-                    f'<div style="background:linear-gradient(135deg,#ffffff,#f8f9fa); '
-                    f'border-radius:14px; padding:16px 20px; margin-top:10px; border:1px solid #e9ecef;">'
-                    f'<div style="font-size:0.85em; color:#868e96; font-weight:600;">🍽️ 오늘의 자산 식탁</div>'
-                    f'<div style="text-align:center; margin:10px 0;">'
-                    f'<div style="font-size:2.4rem;">{meal["icon"]}</div>'
-                    f'<div style="font-size:1.05em; font-weight:700; color:#212529; margin-top:6px;">{meal["menu"]}</div>'
-                    f'<div style="font-size:0.85em; color:#495057; margin-top:5px;">{meal["desc"]}</div>'
-                    f'</div>'
-                    f'<div style="border-top:1px dashed #dee2e6; padding-top:8px; text-align:center; '
-                    f'font-size:0.82em; color:#868e96;">'
-                    f'일 평균 배당: <b style="color:#339af0;">{daily_krw:,.0f}원</b>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-    
-                render_fire_countdown(daily_krw * 30.4)
-    
-            with st.expander("🏠 우리 집 주식 가족 분담금", expanded=False):
+
+                    with st.expander("⚙️ 내 시급으로 환산하기", expanded=False):
+                        st.caption(
+                            "본인의 실제 시급을 기준으로 환산하면 임팩트가 훨씬 커집니다. "
+                            "영구 저장하려면 `.streamlit/secrets.toml`에 "
+                            "`MY_HOURLY_WAGE = 25000` 같이 추가하세요."
+                        )
+                        new_wage = st.number_input(
+                            "이번 세션에서만 적용할 시급(원)",
+                            min_value=1_000,
+                            max_value=500_000,
+                            value=_active_wage,
+                            step=500,
+                            key="custom_wage_input",
+                        )
+                        if st.button("이 세션에 적용", key="apply_custom_wage"):
+                            get_dividend_work_stats.clear()
+                            st.session_state["_custom_wage"] = new_wage
+                            st.rerun()
+
+                    meal = get_daily_meal(daily_krw)
+                    st.markdown(
+                        f'<div style="background:linear-gradient(135deg,#ffffff,#f8f9fa); '
+                        f'border-radius:14px; padding:16px 20px; margin-top:10px; border:1px solid #e9ecef;">'
+                        f'<div style="font-size:0.85em; color:#868e96; font-weight:600;">🍽️ 오늘의 자산 식탁</div>'
+                        f'<div style="text-align:center; margin:10px 0;">'
+                        f'<div style="font-size:2.4rem;">{meal["icon"]}</div>'
+                        f'<div style="font-size:1.05em; font-weight:700; color:#212529; margin-top:6px;">{meal["menu"]}</div>'
+                        f'<div style="font-size:0.85em; color:#495057; margin-top:5px;">{meal["desc"]}</div>'
+                        f'</div>'
+                        f'<div style="border-top:1px dashed #dee2e6; padding-top:8px; text-align:center; '
+                        f'font-size:0.82em; color:#868e96;">'
+                        f'일 평균 배당: <b style="color:#339af0;">{daily_krw:,.0f}원</b>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    render_fire_countdown(daily_krw * 30.4)
+
+                st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+                st.markdown("**🏠 우리 집 주식 가족 분담금**")
                 render_family_contributions(my_portfolio, supabase, user_id)
     
         with st.expander("🍯 배당금 직접 기록하기", expanded=False):

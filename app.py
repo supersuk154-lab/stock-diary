@@ -366,6 +366,7 @@ if "chosen_mentor" not in st.session_state:
 
 # ==========================================
 st.title("📈 AI 주식 페이스메이커")
+st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
 
 # [추가] 사이드바 상단에 로그인 정보 + 로그아웃 버튼
 st.sidebar.markdown(f"👤 **{st.session_state.get('user_email', '로그인됨')}**")
@@ -386,24 +387,6 @@ if st.sidebar.button("🚪 로그아웃"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
-
-# 사용자 가이드 (처음 방문 후 접혀있도록 기본 collapsed)
-with st.expander("📖 사용 방법 보기", expanded=False):
-    st.info("""
-    **1. 데이터 기록 (Track 1)**
-    - MTS 매매 내역이나 잔고를 캡처해 올리세요.
-    - AI가 종목과 수량을 읽어 데이터로 저장합니다.
-    - 장기 투자 성과를 숫자로 확인하세요.
-    """)
-    st.success("""
-    **2. 멘탈 관리 (Track 2)**
-    - 시장이 흔들려 불안할 때 태그를 누르세요.
-    - "무섭다", "팔고 싶다" 등 짧은 감정을 쓰세요.
-    - AI 멘토가 과거 기록을 바탕으로 처방을 내립니다.
-    """)
-    st.caption("💡 Tip: 매일 사진을 올릴 필요는 없습니다. 매매가 없는 날엔 태그 하나와 짧은 생각만 남겨보세요.")
-
-st.markdown("---")
 
 tab1, tab2, tab3, tab4 = st.tabs(["📝 일기 작성", "📚 과거 기록 조회", "📰 투자 리포트", "⚙️ 설정 및 백업"])
 

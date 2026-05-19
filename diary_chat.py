@@ -61,8 +61,16 @@ def render_chat_section(supabase, ai_client) -> list:
     if not selected_tags:
         st.info("👆 위에서 마음에 맞는 태그를 **1개 이상** 골라주세요. 그러면 아래에 AI 멘토와 대화할 수 있는 창이 열립니다.")
     else:
+        # 현재 멘토 힌트 (사이드바로 이동했으므로 채팅창 위에 맥락 표시)
+        _hint_mentor = st.session_state.get("chosen_mentor", "")
+        if _hint_mentor:
+            st.markdown(
+                f'<div style="font-size:0.82em; color:#8B95A1; margin-bottom:4px;">'
+                f'💬 <b>{_hint_mentor}</b>와 대화 중</div>',
+                unsafe_allow_html=True,
+            )
         st.caption("선택한 태그를 보고 AI 멘토가 먼저 말을 걸어줍니다. 자유롭게 답하면서 마음을 정리해보세요.")
-    
+
         # 1) 대화 히스토리 표시 (입력창 위에 누적, 스크롤 컨테이너 적용)
         chat_container = st.container(height=350)
         with chat_container:
@@ -72,9 +80,10 @@ def render_chat_section(supabase, ai_client) -> list:
     
         # 2) 인라인 입력 폼
         with st.form("mind_chat_form", clear_on_submit=True):
+            _mentor_label = st.session_state.get("chosen_mentor", "AI 멘토")
             user_input = st.text_area(
                 "💭 지금 내 심정을 자유롭게 적어보세요",
-                placeholder="예) 시장이 흔들려서 마음이 너무 불안해요. 그냥 다 팔아버리고 싶은데 어떡하죠?",
+                placeholder=f"{_mentor_label}에게 오늘 마음을 털어놓아 보세요...",
                 height=110,
                 key="mind_chat_input",
             )
