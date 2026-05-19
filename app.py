@@ -394,4 +394,4 @@ with tab2:
 with tab3:
     render_report_tab(supabase, st.secrets)
 with tab4:
-    render_settings_tab(supabase, ai_client=ai_client, model_name=MODEL_NAME)
+    render_settings_tab(supabase, ai_client=ai_client, model_name=MODEL_NAME, dev_mode=DEV_MODE)

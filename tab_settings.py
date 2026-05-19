@@ -9,7 +9,7 @@ from app_constants import KST
 from ui_components import card, banner
 from auth import validate_password
 
-def render_settings_tab(supabase, ai_client=None, model_name=None):
+def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=False):
     st.markdown("### ⚙️ 설정 및 데이터 관리")
     st.markdown("<p style='color: #4E5968; font-size: 0.95em;'>비밀번호를 재설정하거나 안전하게 데이터를 백업 및 삭제할 수 있습니다.</p>", unsafe_allow_html=True)
 
@@ -297,75 +297,79 @@ def render_settings_tab(supabase, ai_client=None, model_name=None):
                 help="미연결 종목의 티커를 KRX 데이터베이스와 야후파이낸스 규칙으로 자동으로 찾아 저장합니다.",
             )
         with col_dl:
-            # CSV 다운로드 — 현재 티커 상태 전체 내보내기
-            import io as _io
-            _csv_rows = []
-            for _r in rows:
-                _csv_rows.append({"종목명": _r["종목명"], "야후파이낸스_티커": _r["티커"]})
-            _csv_df = pd.DataFrame(_csv_rows)
-            _csv_buf = _io.StringIO()
-            _csv_df.to_csv(_csv_buf, index=False, encoding="utf-8-sig")
-            st.download_button(
-                label="CSV 다운로드",
-                data=_csv_buf.getvalue().encode("utf-8-sig"),
-                file_name="ticker_list.csv",
-                mime="text/csv",
-                use_container_width=True,
-                help="종목명·티커 목록을 CSV로 받아 엑셀에서 편집한 뒤 아래 업로드 버튼으로 올리세요.",
-            )
+            if dev_mode:
+                import io as _io
+                _csv_rows = []
+                for _r in rows:
+                    _csv_rows.append({"종목명": _r["종목명"], "야후파이낸스_티커": _r["티커"]})
+                _csv_df = pd.DataFrame(_csv_rows)
+                _csv_buf = _io.StringIO()
+                _csv_df.to_csv(_csv_buf, index=False, encoding="utf-8-sig")
+                st.download_button(
+                    label="CSV 다운로드",
+                    data=_csv_buf.getvalue().encode("utf-8-sig"),
+                    file_name="ticker_list.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    help="종목명·티커 목록을 CSV로 받아 엑셀에서 편집한 뒤 아래 업로드 버튼으로 올리세요.",
+                )
         with col_info:
-            st.caption("⚡ 자동 매칭은 미연결(⚠️) 종목만 · CSV로 일괄 수정도 가능합니다.")
+            if dev_mode:
+                st.caption("⚡ 자동 매칭은 미연결(⚠️) 종목만 · CSV로 일괄 수정도 가능합니다.")
+            else:
+                st.caption("⚡ 자동 매칭은 미연결(⚠️) 종목만 대상입니다.")
 
-        # ── CSV 업로드 (일괄 티커 등록) ─────────────────────
-        st.markdown(
-            "<p style='color:#4E5968; font-size:0.88em; margin:4px 0 8px 0;'>"
-            "CSV 다운로드 → 엑셀에서 티커 입력 → 아래에 업로드하면 한 번에 저장됩니다."
-            "</p>",
-            unsafe_allow_html=True,
-        )
-        uploaded_csv = st.file_uploader(
-            "티커가 입력된 CSV 파일 업로드",
-            type=["csv"],
-            key="ticker_csv_uploader",
-            help="CSV 다운로드 후 '야후파이낸스_티커' 열을 채워서 다시 올려주세요.",
-        )
-        if uploaded_csv is not None:
-            try:
-                import io as _io2
-                _up_df = pd.read_csv(_io2.BytesIO(uploaded_csv.read()))
-                _up_df.columns = [c.strip() for c in _up_df.columns]
-                if "종목명" not in _up_df.columns or "야후파이낸스_티커" not in _up_df.columns:
-                    banner("CSV 형식 오류: '종목명'과 '야후파이낸스_티커' 컬럼이 필요합니다.", type="error")
-                else:
-                    st.dataframe(_up_df, use_container_width=True, hide_index=True)
-                    if st.button("이 내용으로 티커 일괄 저장", type="primary", key="csv_upload_save_btn"):
-                        saved, skipped, errors = 0, 0, []
-                        for _, _row in _up_df.iterrows():
-                            _name = str(_row.get("종목명", "")).strip()
-                            _ticker = str(_row.get("야후파이낸스_티커", "")).strip().upper()
-                            if not _name or _ticker in ("", "NAN", "NONE"):
-                                skipped += 1
-                                continue
-                            try:
-                                supabase.table("trades") \
-                                    .update({"ticker": _ticker}) \
-                                    .eq("user_id", _uid) \
-                                    .eq("stock_name", _name) \
-                                    .execute()
-                                saved += 1
-                            except Exception as _e:
-                                errors.append(f"{_name}: {_e}")
-                        get_real_inventory.clear()
-                        if errors:
-                            banner(f"일부 저장 실패:\n" + "\n".join(errors), type="error")
-                        else:
-                            msg = f"✅ {saved}개 종목 티커 저장 완료!"
-                            if skipped:
-                                msg += f" ({skipped}개 빈 티커는 건너뜀)"
-                            banner(msg, type="success")
-                        st.rerun()
-            except Exception as _e:
-                banner(f"CSV 파일 읽기 실패: {_e}", type="error")
+        # ── CSV 업로드 (일괄 티커 등록 — 관리자 전용) ───────
+        if dev_mode:
+            st.markdown(
+                "<p style='color:#4E5968; font-size:0.88em; margin:4px 0 8px 0;'>"
+                "CSV 다운로드 → 엑셀에서 티커 입력 → 아래에 업로드하면 한 번에 저장됩니다."
+                "</p>",
+                unsafe_allow_html=True,
+            )
+            uploaded_csv = st.file_uploader(
+                "티커가 입력된 CSV 파일 업로드",
+                type=["csv"],
+                key="ticker_csv_uploader",
+                help="CSV 다운로드 후 '야후파이낸스_티커' 열을 채워서 다시 올려주세요.",
+            )
+            if uploaded_csv is not None:
+                try:
+                    import io as _io2
+                    _up_df = pd.read_csv(_io2.BytesIO(uploaded_csv.read()))
+                    _up_df.columns = [c.strip() for c in _up_df.columns]
+                    if "종목명" not in _up_df.columns or "야후파이낸스_티커" not in _up_df.columns:
+                        banner("CSV 형식 오류: '종목명'과 '야후파이낸스_티커' 컬럼이 필요합니다.", type="error")
+                    else:
+                        st.dataframe(_up_df, use_container_width=True, hide_index=True)
+                        if st.button("이 내용으로 티커 일괄 저장", type="primary", key="csv_upload_save_btn"):
+                            saved, skipped, errors = 0, 0, []
+                            for _, _row in _up_df.iterrows():
+                                _name = str(_row.get("종목명", "")).strip()
+                                _ticker = str(_row.get("야후파이낸스_티커", "")).strip().upper()
+                                if not _name or _ticker in ("", "NAN", "NONE"):
+                                    skipped += 1
+                                    continue
+                                try:
+                                    supabase.table("trades") \
+                                        .update({"ticker": _ticker}) \
+                                        .eq("user_id", _uid) \
+                                        .eq("stock_name", _name) \
+                                        .execute()
+                                    saved += 1
+                                except Exception as _e:
+                                    errors.append(f"{_name}: {_e}")
+                            get_real_inventory.clear()
+                            if errors:
+                                banner(f"일부 저장 실패:\n" + "\n".join(errors), type="error")
+                            else:
+                                msg = f"✅ {saved}개 종목 티커 저장 완료!"
+                                if skipped:
+                                    msg += f" ({skipped}개 빈 티커는 건너뜀)"
+                                banner(msg, type="success")
+                            st.rerun()
+                except Exception as _e:
+                    banner(f"CSV 파일 읽기 실패: {_e}", type="error")
 
         if auto_btn:
             targets = [item for item in inventory if not item.get("ticker")]
