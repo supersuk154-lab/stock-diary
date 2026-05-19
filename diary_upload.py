@@ -46,7 +46,7 @@ def _render_step_upload(supabase, ai_client):
             mask_height = int(height * (mask_ratio / 100.0))
             draw.rectangle(((0, 0), (width, mask_height)), fill="black")
 
-        st.image(image, caption='최종 분석용 이미지', width="stretch")
+        st.image(image, caption='최종 분석용 이미지', use_container_width=True)
 
         if st.button("✅ 가림막 설정 완료 및 정보 추출"):
             # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
@@ -105,7 +105,7 @@ def _render_step_verify(supabase):
     st.subheader("🔍 변동 내역 확인 및 사유 입력")
 
     if 'processed_image' in st.session_state:
-        st.image(st.session_state['processed_image'], caption='비교 확인용 사진', width="stretch")
+        st.image(st.session_state['processed_image'], caption='비교 확인용 사진', use_container_width=True)
 
     _parse_error = False
     try:
