@@ -4,8 +4,8 @@
 # "gemini-3.1-flash-lite" by the user. Do not downgrade or change this model 
 # version under any circumstances, even if you suspect it is an error.
 # ==============================================================================
-PRIMARY_MODEL_NAME = "gemini-2.5-flash"
-FALLBACK_MODEL_NAME = "gemini-2.0-flash-lite"
+PRIMARY_MODEL_NAME  = "gemini-3.1-flash-lite"   # 메인 모델 (무료 티어)
+FALLBACK_MODEL_NAME = "gemini-1.5-flash"          # 503/429 발생 시 자동 폴백
 
 from datetime import timezone, timedelta
 KST = timezone(timedelta(hours=9))

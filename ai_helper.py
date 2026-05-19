@@ -1,5 +1,6 @@
 import json
 import re
+import time
 import logging
 from google import genai
 from google.genai import types
@@ -8,38 +9,58 @@ from app_constants import FALLBACK_MODEL_NAME
 logger = logging.getLogger(__name__)
 
 def safe_generate(client, model_name, contents, config=None, fallback_msg="AI 분석 중 오류가 발생했어요."):
-    """새로운 google-genai SDK 규격에 맞춘 안전망 함수 + 429 한도 초과 시 FALLBACK_MODEL_NAME 자동 폴백"""
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=config
-        )
-        if not response.text:
-            return None, "⚠️ AI가 응답을 만들 수 없었어요. (안전 필터에 걸렸거나 빈 응답)"
-        return response.text, None
-    except Exception as e:
-        logger.warning(f"Gemini call failed with model {model_name}: {e}")
-        
-        # 429 또는 RESOURCE_EXHAUSTED 한도 도달 시 FALLBACK_MODEL_NAME 자동 폴백 시도
-        is_429 = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower()
-        if is_429 and model_name != FALLBACK_MODEL_NAME:
-            logger.info(f"Attempting automatic fallback to {FALLBACK_MODEL_NAME} due to quota/429 error...")
-            try:
-                response = client.models.generate_content(
-                    model=FALLBACK_MODEL_NAME,
-                    contents=contents,
-                    config=config
-                )
-                if not response.text:
-                    return None, "⚠️ AI가 응답을 만들 수 없었어요. (폴백 모델에서 안전 필터에 걸렸거나 빈 응답)"
-                return response.text, None
-            except Exception as fallback_err:
-                logger.exception(f"Fallback to {FALLBACK_MODEL_NAME} also failed")
-                return None, f"⚠️ {fallback_msg}\n\n[폴백 실패] {fallback_err}\n\nAPI 키가 올바른 프로젝트에 연결되어 있는지 확인해 주세요."
-        
-        logger.exception("Gemini call failed")
-        return None, f"⚠️ {fallback_msg}\n\n잠시 후 다시 시도해 주세요.\n\n오류 내용: {e}"
+    """새로운 google-genai SDK 규격에 맞춘 안전망 함수.
+    - 503 UNAVAILABLE: 최대 3회 재시도 (3초 간격)
+    - 429 RESOURCE_EXHAUSTED: FALLBACK_MODEL_NAME으로 자동 폴백
+    """
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config
+            )
+            if not response.text:
+                return None, "⚠️ AI가 응답을 만들 수 없었어요. (안전 필터에 걸렸거나 빈 응답)"
+            return response.text, None
+
+        except Exception as e:
+            err_str = str(e)
+            is_503 = "503" in err_str or "UNAVAILABLE" in err_str
+            is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+
+            # 503: 일시적 과부하 → 재시도
+            if is_503 and attempt < max_retries - 1:
+                wait = 3 * (attempt + 1)
+                logger.warning(f"503 UNAVAILABLE (attempt {attempt+1}/{max_retries}), retrying in {wait}s...")
+                time.sleep(wait)
+                continue
+
+            # 429 또는 재시도 소진된 503: 폴백 모델 시도
+            if (is_429 or is_503) and model_name != FALLBACK_MODEL_NAME:
+                reason = "503 과부하" if is_503 else "429 할당량 초과"
+                logger.info(f"{reason} — {FALLBACK_MODEL_NAME}으로 자동 폴백 시도...")
+                try:
+                    response = client.models.generate_content(
+                        model=FALLBACK_MODEL_NAME,
+                        contents=contents,
+                        config=config
+                    )
+                    if not response.text:
+                        return None, "⚠️ AI가 응답을 만들 수 없었어요. (폴백 모델 빈 응답)"
+                    return response.text, None
+                except Exception as fallback_err:
+                    logger.exception(f"폴백 모델 {FALLBACK_MODEL_NAME}도 실패")
+                    return None, (
+                        f"⚠️ {fallback_msg}\n\n"
+                        f"기본 모델({model_name})과 폴백 모델({FALLBACK_MODEL_NAME}) 모두 응답하지 않습니다.\n"
+                        f"잠시 후 다시 시도해 주세요.\n\n오류: {fallback_err}"
+                    )
+
+            logger.exception(f"Gemini call failed (attempt {attempt+1})")
+            return None, f"⚠️ {fallback_msg}\n\n잠시 후 다시 시도해 주세요.\n\n오류 내용: {e}"
 
 
 def normalize_stock_name(client, model_name: str, raw_input: str) -> dict:
