@@ -11,7 +11,6 @@ import datetime
 from app_constants import KST
 from pathlib import Path
 import yfinance as yf
-from ui_components import render_radar_chart
 from session_utils import (
     SESSION_CACHE_PATH, get_dev_mode,
     save_session_to_disk, load_session_from_disk, clear_session_from_disk,

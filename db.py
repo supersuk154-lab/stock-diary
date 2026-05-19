@@ -7,6 +7,7 @@ __all__ = [
     "KST",
     "to_kst_str",
     "calculate_scores",
+    "calculate_investment_score",
     "has_tag",
     "get_past_context",
     "get_recent_journals",
@@ -86,6 +87,185 @@ def calculate_scores(supabase, user_id: str = ""):
 
     consistency = min(streak * 3.3, 100)
     return {"원칙 준수": principle, "멘탈 방어": mental, "성실도": consistency, "자기 객관화": review}
+
+
+def calculate_investment_score(supabase, user_id: str) -> dict:
+    """
+    실제 보유 종목 + 거래 이력 + 일기 태그를 종합해 100점 만점 투자 점수를 계산.
+    반환 구조:
+      {
+        "total": int,
+        "grade": str, "grade_emoji": str,
+        "categories": {
+            "종목 품질": {"score": int, "max": 40},
+            "장기 보유": {"score": int, "max": 35},
+            "투자 습관": {"score": int, "max": 25},
+        },
+        "stock_evals": [{"name", "ticker", "type", "quality_pts", "hold_days", "hold_pts"}, ...],
+        "habit_detail": {"routine": int, "defense": int, "panic": int},
+      }
+    """
+    import re as _re
+
+    # ── 우량주 / ETF 분류 기준 ──────────────────────────
+    US_ETFS = {
+        "VOO","QQQ","SPY","SCHD","JEPI","VTI","IVV","VYM","QYLD","JEPQ",
+        "DIVO","DGRO","NOBL","SPHD","HDV","DVY","VIG","SDY","SPLG","CSPX",
+        "GLD","SLV","BND","AGG","TLT","IAU","ARKK","XLK","XLE","XLF",
+    }
+    US_BLUE_CHIPS = {
+        "AAPL","MSFT","NVDA","GOOGL","GOOG","AMZN","META","TSLA","BRK-B",
+        "JPM","JNJ","UNH","V","MA","PG","HD","COST","ABBV","LLY","WMT",
+        "BAC","XOM","CVX","MCD","KO","PEP","MRK","TMO","NEE",
+    }
+    KR_ETF_KEYWORDS = ["KODEX","TIGER","ACE","KINDEX","HANARO","ARIRANG","KOSEF","SMART","FOCUS"]
+    KR_BLUE_CHIPS = {
+        "005930.KS","000660.KS","035420.KS","005380.KS","051910.KS",
+        "035720.KS","207940.KS","006400.KS","373220.KS","068270.KS",
+        "003550.KS","015760.KS","030200.KS","032830.KS","086790.KS",
+    }
+
+    # ── 1. 보유 종목 ────────────────────────────────────
+    inventory = get_real_inventory(user_id, supabase)
+
+    # ── 2. 종목별 최초 매수일 ────────────────────────────
+    try:
+        trades_resp = (
+            supabase.table("trades")
+            .select("stock_name, created_at, quantity")
+            .eq("user_id", user_id)
+            .gt("quantity", 0)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        trades_data = trades_resp.data or []
+    except Exception:
+        trades_data = []
+
+    first_buy_map = {}
+    for t in trades_data:
+        sn = t.get("stock_name", "")
+        if sn and sn not in first_buy_map:
+            try:
+                dt = datetime.datetime.fromisoformat(t["created_at"].replace("Z", "+00:00"))
+                first_buy_map[sn] = dt
+            except Exception:
+                pass
+
+    # ── 3. 최근 30일 일기 태그 ──────────────────────────
+    thirty_ago = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    ).isoformat()
+    try:
+        j_resp = (
+            supabase.table("journals")
+            .select("tags")
+            .eq("user_id", user_id)
+            .gte("created_at", thirty_ago)
+            .execute()
+        )
+        tags_list = [r["tags"] for r in (j_resp.data or []) if r.get("tags")]
+    except Exception:
+        tags_list = []
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # ── 카테고리 1: 종목 품질 (40점) ────────────────────
+    stock_evals = []
+    raw_quality = 0
+
+    for item in inventory:
+        name = item.get("종목", "")
+        ticker = (item.get("ticker") or "").strip().upper()
+
+        is_kr_etf = any(kw in name for kw in KR_ETF_KEYWORDS)
+        is_us_etf = ticker in US_ETFS
+        is_kr_blue = ticker in KR_BLUE_CHIPS
+        is_us_blue = ticker in US_BLUE_CHIPS
+
+        if is_kr_etf or is_us_etf:
+            stype, qpts = "ETF (분산투자)", 8
+        elif is_kr_blue or is_us_blue:
+            stype, qpts = "우량주", 6
+        elif ticker.endswith(".KS") or ticker.endswith(".KQ"):
+            stype, qpts = "한국 주식", 4
+        elif _re.match(r"^[A-Z]{1,5}(-[A-Z])?$", ticker):
+            stype, qpts = "미국 주식", 4
+        else:
+            stype, qpts = "미분류", 2
+
+        stock_evals.append({
+            "name": name, "ticker": ticker or "—",
+            "type": stype, "quality_pts": qpts,
+            "hold_days": 0, "hold_pts": 0,
+        })
+        raw_quality += qpts
+
+    quality_score = min(raw_quality, 40)
+
+    # ── 카테고리 2: 장기 보유 (35점) ────────────────────
+    raw_hold = 0
+    for ev in stock_evals:
+        first_buy = first_buy_map.get(ev["name"])
+        hold_days = (now - first_buy).days if first_buy else 0
+        ev["hold_days"] = hold_days
+
+        if hold_days >= 365:
+            hpts = 10
+        elif hold_days >= 180:
+            hpts = 8
+        elif hold_days >= 90:
+            hpts = 6
+        elif hold_days >= 30:
+            hpts = 3
+        else:
+            hpts = 1
+        ev["hold_pts"] = hpts
+        raw_hold += hpts
+
+    hold_score = min(raw_hold, 35)
+
+    # ── 카테고리 3: 투자 습관 (25점) ────────────────────
+    routine_cnt = sum(1 for t in tags_list if "#월급날정기매수" in t)
+    defense_cnt = sum(
+        1 for t in tags_list
+        if any(k in t for k in ["#존버는승리한다", "#오늘은안봤다", "#한템포쉬어가기", "#배당금달달해"])
+    )
+    panic_cnt = sum(1 for t in tags_list if "#뇌동매매반성" in t)
+
+    raw_habit = (routine_cnt * 5) + (defense_cnt * 3) - (panic_cnt * 5)
+    habit_score = max(0, min(raw_habit, 25))
+
+    total = quality_score + hold_score + habit_score
+
+    # ── 등급 ────────────────────────────────────────────
+    if total >= 90:
+        grade, grade_emoji = "전설의 투자자", "🏆"
+    elif total >= 75:
+        grade, grade_emoji = "장기투자 고수", "💎"
+    elif total >= 60:
+        grade, grade_emoji = "성장하는 투자자", "📈"
+    elif total >= 45:
+        grade, grade_emoji = "기초 다지는 중", "🌱"
+    else:
+        grade, grade_emoji = "투자 입문 단계", "🐣"
+
+    return {
+        "total": total,
+        "grade": grade,
+        "grade_emoji": grade_emoji,
+        "categories": {
+            "종목 품질": {"score": quality_score, "max": 40},
+            "장기 보유": {"score": hold_score, "max": 35},
+            "투자 습관": {"score": habit_score, "max": 25},
+        },
+        "stock_evals": stock_evals,
+        "habit_detail": {
+            "routine": routine_cnt,
+            "defense": defense_cnt,
+            "panic": panic_cnt,
+        },
+    }
 
 
 def has_tag(tags: list, keyword: str) -> bool:
