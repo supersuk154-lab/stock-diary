@@ -29,7 +29,7 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
         st.markdown("#### 로그인")
         email = st.text_input("이메일", placeholder="you@example.com")
         password = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요")
-        login_btn = st.form_submit_button("✅ 로그인", type="primary", use_container_width=True)
+        login_btn = st.form_submit_button("✅ 로그인", type="primary", width="stretch")
 
     if login_btn:
         if not email or not password:
@@ -63,7 +63,7 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
             su_email = st.text_input("이메일", placeholder="you@example.com", key="su_email")
             su_password = st.text_input("비밀번호", type="password", placeholder="8자리 이상 (영문+숫자 포함)", key="su_pw")
             su_password2 = st.text_input("비밀번호 확인", type="password", placeholder="비밀번호를 한 번 더 입력하세요", key="su_pw2")
-            signup_btn = st.form_submit_button("🎉 회원가입", type="primary", use_container_width=True)
+            signup_btn = st.form_submit_button("🎉 회원가입", type="primary", width="stretch")
 
     if signup_btn:
         if not su_email or not su_password or not su_password2:
@@ -89,7 +89,7 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
         if step == "email":
             with st.form("reset_email_form"):
                 reset_email = st.text_input("가입한 이메일", placeholder="you@example.com")
-                send_btn = st.form_submit_button("📨 인증코드 받기", type="primary", use_container_width=True)
+                send_btn = st.form_submit_button("📨 인증코드 받기", type="primary", width="stretch")
             if send_btn:
                 if not reset_email:
                     st.warning("이메일을 입력해주세요.")
@@ -111,7 +111,7 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
             st.info(f"📧 **{st.session_state.get('pw_reset_email')}** 으로 인증코드를 보냈습니다.")
             with st.form("reset_otp_form"):
                 otp_code = st.text_input("이메일로 받은 인증코드", max_chars=8, placeholder="6~8자리")
-                otp_btn = st.form_submit_button("✅ 확인", type="primary", use_container_width=True)
+                otp_btn = st.form_submit_button("✅ 확인", type="primary", width="stretch")
             if otp_btn:
                 if not otp_code:
                     st.warning("인증코드를 입력해주세요.")
@@ -138,7 +138,7 @@ def show_login(supabase_url: str, supabase_anon_key: str, dev_mode: bool) -> Non
             with st.form("reset_newpw_form"):
                 new_pw = st.text_input("새 비밀번호", type="password", placeholder="8자리 이상 (영문+숫자 포함)")
                 new_pw2 = st.text_input("새 비밀번호 확인", type="password")
-                save_btn = st.form_submit_button("🔒 비밀번호 변경", type="primary", use_container_width=True)
+                save_btn = st.form_submit_button("🔒 비밀번호 변경", type="primary", width="stretch")
             if save_btn:
                 if not new_pw or not new_pw2:
                     st.warning("비밀번호를 입력해주세요.")

@@ -140,6 +140,6 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                 st.warning(f"점수 조회 실패: {e}")
                 current_scores = {"원칙 준수": 0, "멘탈 방어": 0, "성실도": 0, "자기 객관화": 0}
             radar_fig = render_radar_chart(current_scores)
-            st.plotly_chart(radar_fig, use_container_width=True)
+            st.plotly_chart(radar_fig, width="stretch")
             streak_days = int(current_scores['성실도'] // 3.3)
             banner(f"🔥 현재 <b>{streak_days}일 연속</b> 기록 중입니다! 멋진 페이스를 보여주고 계시네요.", type="info")

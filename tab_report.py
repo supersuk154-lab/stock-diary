@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import datetime
 from datetime import timezone, timedelta
 
@@ -73,7 +72,7 @@ def _format_kst(iso_ts: str) -> str:
 
 
 def _render_report_html(html_content: str, height: int = 1800):
-    components.html(html_content, height=height, scrolling=True)
+    st.iframe(src=html_content, height=height)
 
 
 def render_report_tab(supabase, secrets):

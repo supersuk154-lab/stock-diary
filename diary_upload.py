@@ -66,7 +66,7 @@ def render_upload_section(supabase, ai_client, selected_tags):
                 mask_height = int(height * (mask_ratio / 100.0))
                 draw.rectangle(((0, 0), (width, mask_height)), fill="black")
     
-            st.image(image, caption='최종 분석용 이미지', use_container_width=True)
+            st.image(image, caption='최종 분석용 이미지', width="stretch")
     
             if st.button("✅ 가림막 설정 완료 및 정보 추출"):
                 # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
@@ -127,7 +127,7 @@ def render_upload_section(supabase, ai_client, selected_tags):
         st.subheader("🔍 변동 내역 확인 및 사유 입력")
     
         if 'processed_image' in st.session_state:
-            st.image(st.session_state['processed_image'], caption='비교 확인용 사진', use_container_width=True)
+            st.image(st.session_state['processed_image'], caption='비교 확인용 사진', width="stretch")
     
         _parse_error = False
         try:
@@ -235,14 +235,14 @@ def render_upload_section(supabase, ai_client, selected_tags):
                 with col_text:
                     st.write(f"- {item}")
                 with col_del:
-                    if st.button("삭제", key=f"del_{i}", use_container_width=True):
+                    if st.button("삭제", key=f"del_{i}", width="stretch"):
                         st.session_state['daily_stock_list'].pop(i)
                         st.rerun()
     
-        if st.button("📊 분석 시작하기", type="primary", use_container_width=True):
+        if st.button("📊 분석 시작하기", type="primary", width="stretch"):
             st.session_state['current_step'] = 'final_analysis'
             st.rerun()
-        if st.button("➕ 추가 입력하기", use_container_width=True):
+        if st.button("➕ 추가 입력하기", width="stretch"):
             st.session_state['uploader_key'] += 1
             st.session_state['current_step'] = 'upload_mode'
             st.rerun()
