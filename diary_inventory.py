@@ -341,11 +341,11 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool):
                             padding:16px; border-radius:16px; margin-bottom:12px;
                             background-color:#FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
                             border: 1px solid #F2F4F6;">
-                    <div style="line-height:1.4;">
-                        <div style="font-weight:700; font-size:1.05em; color:#333D4B;">{item['종목']}</div>
-                        <div style="color:#8B95A1; font-size:0.85em;">{item['수량']:,.0f}주 보유</div>
+                    <div style="line-height:1.4; flex: 1; min-width: 0; padding-right: 16px;">
+                        <div style="font-weight:700; font-size:1.05em; color:#333D4B; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="{item['종목']}">{item['종목']}</div>
+                        <div style="color:#8B95A1; font-size:0.85em; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{item['수량']:,.0f}주 보유</div>
                     </div>
-                    <div style="text-align:right; line-height:1.4;">
+                    <div style="text-align:right; line-height:1.4; flex-shrink: 0;">
                         <div>{price_html}</div>
                         <div>{rate_html}</div>
                     </div>

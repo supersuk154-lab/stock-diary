@@ -61,6 +61,17 @@ toss_style = """
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
     }
 
+    /* [최적화] 제목 옆 자동 생성되는 링크 아이콘 숨기기 */
+    .stMarkdown a.header-anchor {
+        display: none !important;
+    }
+
+    /* [최적화] 단어 중간에서 줄바꿈 방지 (한국어 가독성 최적화) */
+    html, body, [class*="css"], .stMarkdown p, h1, h2, h3, h4, h5, h6 {
+        word-break: keep-all !important;
+        overflow-wrap: break-word !important;
+    }
+
     /* 모바일 최소 글자 크기 보장 */
     .stMarkdown p, .stMarkdown li, .stCaption {
         font-size: 14px !important;
@@ -183,6 +194,17 @@ toss_style = """
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
         max-width: 600px !important; /* 모바일 앱처럼 폭을 제한 */
+    }
+
+    /* [최적화] 모바일 기기 특화 스타일 (화면 폭 600px 이하) */
+    @media (max-width: 600px) {
+        h1 {
+            font-size: 1.8rem !important;
+        }
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
     }
 </style>
 """
