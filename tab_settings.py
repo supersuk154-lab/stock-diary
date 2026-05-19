@@ -4,11 +4,12 @@ import datetime
 import pandas as pd
 from db import to_kst_str, get_recent_journals, get_real_inventory
 from prices import resolve_ticker
+from ai_helper import ai_resolve_ticker
 from app_constants import KST
 from ui_components import card, banner
 from auth import validate_password
 
-def render_settings_tab(supabase):
+def render_settings_tab(supabase, ai_client=None, model_name=None):
     st.markdown("### ⚙️ 설정 및 데이터 관리")
     st.markdown("<p style='color: #4E5968; font-size: 0.95em;'>비밀번호를 재설정하거나 안전하게 데이터를 백업 및 삭제할 수 있습니다.</p>", unsafe_allow_html=True)
 
@@ -375,6 +376,8 @@ def render_settings_tab(supabase):
                 with st.spinner(f"{len(targets)}개 종목 티커 자동 조회 중... (KRX 조회 포함, 최초 1회는 오래 걸릴 수 있어요)"):
                     for item in targets:
                         found = resolve_ticker(item["종목"])
+                        if not found and ai_client and model_name:
+                            found = ai_resolve_ticker(ai_client, model_name, item["종목"])
                         if found:
                             try:
                                 supabase.table("trades") \

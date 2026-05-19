@@ -3,7 +3,7 @@ import json
 import re
 from PIL import Image, ImageDraw
 from google.genai import types
-from ai_helper import safe_generate
+from ai_helper import safe_generate, ai_resolve_ticker
 from prices import _market_time_bucket, get_realtime_prices_bulk, resolve_ticker
 from db import get_real_inventory, get_past_context, get_recent_journals, has_tag
 from ui_components import sanitize_html
@@ -440,6 +440,8 @@ def _render_step_final(supabase, ai_client, selected_tags):
                             raw_name   = trade["stock_name"]
                             normalized = " ".join(raw_name.split())
                             ticker     = resolve_ticker(normalized)
+                            if not ticker:
+                                ticker = ai_resolve_ticker(ai_client, MODEL_NAME, normalized)
                             trade["_normalized_name"] = normalized
                             trade["_ticker"]          = ticker
                             if ticker:

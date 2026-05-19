@@ -61,13 +61,28 @@ def _get_krx_name_map() -> dict:
         return {}
 
 
+@st.cache_data(ttl=86400)
+def _yahoo_search_ticker(stock_name: str) -> str | None:
+    """야후파이낸스 Search API로 종목명 → 티커 조회 (하루 캐시)."""
+    try:
+        results = yf.Search(stock_name, max_results=3, news_count=0)
+        for quote in results.quotes:
+            symbol = quote.get("symbol", "")
+            if symbol:
+                return symbol
+    except Exception:
+        pass
+    return None
+
+
 def resolve_ticker(stock_name: str, ticker_hint: str = "", krx_map: dict | None = None) -> str | None:
     """종목명 → 야후파이낸스 티커 변환.
 
     1순위: TICKER_MAP (수동 보정, 빠름)
     2순위: KRX 전체 맵 (pykrx — 한국 상장 전 종목)
-    3순위: 영문 1~6자 → 미국 티커 직접 시도 (SCHD, VOO, AAPL 등)
-    4순위: ticker_hint (호출부에서 전달한 힌트)
+    3순위: 영문 1~7자 → 미국 티커 직접 시도 (SCHD, VOO, AAPL 등)
+    4순위: 야후파이낸스 Search API (긴 영문 펀드명 등)
+    5순위: ticker_hint (호출부에서 전달한 힌트)
     """
     normalized = " ".join(stock_name.split())
 
@@ -87,7 +102,12 @@ def resolve_ticker(stock_name: str, ticker_hint: str = "", krx_map: dict | None 
     if re.match(r'^[A-Za-z][A-Za-z0-9\.\-]{0,6}$', clean):
         return clean.upper()
 
-    # 4. 호출부 힌트
+    # 4. 야후파이낸스 Search API — 긴 영문 펀드명 등 자동 검색
+    ticker = _yahoo_search_ticker(normalized)
+    if ticker:
+        return ticker
+
+    # 5. 호출부 힌트
     if ticker_hint:
         return ticker_hint.strip() or None
 
