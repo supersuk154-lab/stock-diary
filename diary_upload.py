@@ -127,38 +127,54 @@ def _render_step_upload(supabase, ai_client):
                 st.session_state['current_step'] = 'ask_next'
                 st.rerun()
 
-    # ── 매도 탭 ──────────────────────────────────────────
+    # ── 매도 탭 (보유 종목 드롭다운) ────────────────────────
     with tab_sell:
-        with st.form("manual_sell_form", clear_on_submit=True):
-            col_name, col_qty = st.columns([3, 2])
-            with col_name:
-                sell_stock = st.text_input(
-                    "종목명",
-                    placeholder="예: 삼성전자, SCHD",
-                    key="sell_stock_name",
+        _uid = st.session_state.get("user_id", "")
+        inventory = get_real_inventory(_uid, supabase) if _uid else []
+
+        if not inventory:
+            st.info("📭 현재 보물창고에 보유 중인 종목이 없어요.\n\n먼저 매수 내역을 기록해 주세요!")
+        else:
+            # 드롭다운 옵션: "종목명 (보유 N주)" 형태
+            stock_options = {
+                item["종목"]: item["수량"]
+                for item in inventory
+            }
+            option_labels = [
+                f"{name}  ·  보유 {qty:g}주"
+                for name, qty in stock_options.items()
+            ]
+            label_to_name = {label: name for label, name in zip(option_labels, stock_options.keys())}
+
+            with st.form("manual_sell_form", clear_on_submit=True):
+                selected_label = st.selectbox(
+                    "매도할 종목 선택",
+                    options=option_labels,
+                    key="sell_stock_select",
                 )
-            with col_qty:
+
+                selected_name = label_to_name.get(selected_label, "")
+                max_qty = float(stock_options.get(selected_name, 1))
+
                 sell_qty = st.number_input(
-                    "수량 (주)",
+                    f"매도 수량 (최대 {max_qty:g}주)",
                     min_value=0.0001,
-                    value=1.0,
+                    max_value=max_qty,
+                    value=min(1.0, max_qty),
                     step=1.0,
                     format="%.4g",
                     key="sell_qty_input",
                 )
-            sell_memo = st.text_input(
-                "매도 사유 (선택)",
-                placeholder="예: 목표가 달성, 리밸런싱",
-                key="sell_memo_input",
-            )
-            sell_submitted = st.form_submit_button("🔴 매도 추가", type="primary", use_container_width=True)
+                sell_memo = st.text_input(
+                    "매도 사유 (선택)",
+                    placeholder="예: 목표가 달성, 리밸런싱",
+                    key="sell_memo_input",
+                )
+                sell_submitted = st.form_submit_button("🔴 매도 추가", type="primary", use_container_width=True)
 
-        if sell_submitted:
-            if not sell_stock or not sell_stock.strip():
-                st.error("종목명을 입력해주세요.")
-            else:
+            if sell_submitted:
                 memo_str = f" (사유: {sell_memo.strip()})" if sell_memo and sell_memo.strip() else ""
-                entry = f"{sell_stock.strip()} {sell_qty:.4g}주 매도{memo_str}"
+                entry = f"{selected_name} {sell_qty:g}주 매도{memo_str}"
                 st.session_state['daily_stock_list'].append(f"[직접 입력] {entry}")
                 st.success(f"✅ {entry} — 추가됐어요!")
                 st.session_state['current_step'] = 'ask_next'
