@@ -283,6 +283,16 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                     item.get("ticker") or resolve_ticker(item["종목"])
                 )
 
+            unmatched_names = [name for name, t in item_tickers.items() if not t]
+            if unmatched_names:
+                banner(
+                    f"⚠️ **{len(unmatched_names)}개 종목**의 실시간 시세를 불러오지 못하고 있어요.\n\n"
+                    f"해당 종목: {', '.join(unmatched_names)}\n\n"
+                    "**⚙️ 설정 탭 → '야후파이낸스 기준 자동 매칭'** 버튼을 눌러주세요. "
+                    "AI가 자동으로 티커를 찾아 연결해 드립니다.",
+                    type="warning",
+                )
+
             all_tickers = tuple(t for t in item_tickers.values() if t)
             _tb = _market_time_bucket()
             bulk_prices = get_realtime_prices_bulk(all_tickers, time_bucket=_tb) if all_tickers else {}
@@ -362,7 +372,6 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                 </div>"""
     
             st.markdown(rows_html, unsafe_allow_html=True)
-            st.caption("💡 '티커 미등록' 종목은 새로 매수 기록 시 자동 등록됩니다. 한국 주식은 KRX 전체 조회, 미국 주식은 영문 종목명을 그대로 티커로 시도합니다.")
     
             # 누적 배당금 요약
             div_totals = get_dividend_total(user_id, supabase)
