@@ -78,9 +78,7 @@ def render_upload_section(supabase, ai_client, selected_tags):
                 st.session_state["last_ai_call"] = time.time()
 
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
-                    config = types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                    )
+                    config = types.GenerateContentConfig()
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
                         "보유 중인 모든 종목명과 수량을 추출해줘. "
@@ -133,8 +131,15 @@ def render_upload_section(supabase, ai_client, selected_tags):
     
         _parse_error = False
         try:
-            ai_text = st.session_state.get('temp_extracted_data', '{}')
-            extracted_dict = json.loads(ai_text.strip())
+            ai_text = st.session_state.get('temp_extracted_data', '{}').strip()
+            if ai_text.startswith('```json'):
+                ai_text = ai_text[7:]
+            elif ai_text.startswith('```'):
+                ai_text = ai_text[3:]
+            if ai_text.endswith('```'):
+                ai_text = ai_text[:-3]
+            ai_text = ai_text.strip()
+            extracted_dict = json.loads(ai_text)
             extracted_dict = {k: float(v) for k, v in extracted_dict.items()}
         except Exception as e:
             st.error(f"AI 응답 파싱 실패 ({e}).")
@@ -331,8 +336,7 @@ def render_upload_section(supabase, ai_client, selected_tags):
 """
     
                 config = types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json"
+                    system_instruction=system_instruction
                 )
     
                 tag_text = " ".join(selected_tags) if selected_tags else ""
@@ -350,8 +354,17 @@ def render_upload_section(supabase, ai_client, selected_tags):
                     st.session_state['final_error'] = err
                 else:
                     try:
+                        final_text_cleaned = final_text.strip()
+                        if final_text_cleaned.startswith('```json'):
+                            final_text_cleaned = final_text_cleaned[7:]
+                        elif final_text_cleaned.startswith('```'):
+                            final_text_cleaned = final_text_cleaned[3:]
+                        if final_text_cleaned.endswith('```'):
+                            final_text_cleaned = final_text_cleaned[:-3]
+                        final_text_cleaned = final_text_cleaned.strip()
+                        
                         # pyrefly: ignore [missing-attribute]
-                        ai_data = json.loads(final_text.strip())
+                        ai_data = json.loads(final_text_cleaned)
                         ai_feedback = ai_data.get("ai_feedback", "기록이 저장되었습니다.")
                         extracted_trades = ai_data.get("extracted_trades", [])
     
