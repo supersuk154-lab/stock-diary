@@ -1,10 +1,8 @@
 import math
 import datetime
-from datetime import timezone, timedelta
 import yfinance as yf
 import streamlit as st
-
-KST = timezone(timedelta(hours=9))
+from app_constants import KST
 
 # 국내 종목 중 pykrx가 이름을 다르게 반환하는 경우의 수동 보정 맵
 # (pykrx 로딩 실패 시 최소 폴백 역할도 겸함)

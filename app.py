@@ -8,7 +8,7 @@ import json
 import re
 import math
 import datetime
-from datetime import timezone, timedelta
+from app_constants import KST
 from pathlib import Path
 import yfinance as yf
 from ui_components import render_radar_chart
@@ -30,8 +30,6 @@ from PIL import Image, ImageDraw
 # [변경] sqlite3 → supabase
 from supabase import create_client, Client
 
-# 한국 시간대 상수 (UTC+9)
-KST = timezone(timedelta(hours=9))
 
 # ==========================================
 # 2. 앱 기본 설정

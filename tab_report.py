@@ -1,8 +1,6 @@
 import streamlit as st
 import datetime
-from datetime import timezone, timedelta
-
-KST = timezone(timedelta(hours=9))
+from app_constants import KST
 
 
 def _is_admin(secrets) -> bool:
@@ -31,10 +29,11 @@ def _get_latest_report(supabase):
         return None
 
 
-def _get_report_list(supabase, limit: int = 20):
+@st.cache_data(ttl=600)
+def _get_report_list(_supabase, limit: int = 20):
     try:
         resp = (
-            supabase.table("daily_reports")
+            _supabase.table("daily_reports")
             .select("id, created_at, title")
             .order("created_at", desc=True)
             .limit(limit)
@@ -46,10 +45,11 @@ def _get_report_list(supabase, limit: int = 20):
         return []
 
 
-def _get_report_by_id(supabase, report_id: int):
+@st.cache_data(ttl=600)
+def _get_report_by_id(_supabase, report_id: int):
     try:
         resp = (
-            supabase.table("daily_reports")
+            _supabase.table("daily_reports")
             .select("id, created_at, title, html_content")
             .eq("id", report_id)
             .single()
@@ -71,8 +71,9 @@ def _format_kst(iso_ts: str) -> str:
         return iso_ts
 
 
+import streamlit.components.v1 as components
 def _render_report_html(html_content: str, height: int = 1800):
-    st.iframe(src=html_content, height=height)
+    components.html(html_content, height=height, scrolling=True)
 
 
 def render_report_tab(supabase, secrets):
@@ -111,7 +112,8 @@ def _render_admin_section(supabase):
                         "uploaded_by": st.session_state.get("user_email", ""),
                     }).execute()
                     st.success(f"✅ 리포트 저장 완료: **{title}**")
-                    st.cache_data.clear()
+                    _get_report_list.clear()
+                    _get_report_by_id.clear()
                     st.rerun()
                 except Exception as e:
                     st.error(f"저장 실패: {e}")

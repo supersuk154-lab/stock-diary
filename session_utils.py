@@ -18,8 +18,9 @@ def get_dev_mode(secrets) -> bool:
 # ── PIN 관련 유틸 ──────────────────────────────────────────
 
 def hash_pin(pin: str) -> str:
-    """PIN을 SHA-256으로 해싱."""
-    return hashlib.sha256(pin.encode()).hexdigest()
+    """PIN을 레인보우 테이블 공격 방어용 PEPPER와 함께 SHA-256으로 해싱."""
+    PEPPER = "StockDiaryPacemaker2026!#@$"
+    return hashlib.sha256((pin + PEPPER).encode('utf-8')).hexdigest()
 
 
 def save_pin_cache(session_dict: dict, pin_hash: str, email: str) -> None:

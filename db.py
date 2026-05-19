@@ -1,9 +1,7 @@
 import datetime
 import logging
-from datetime import timezone, timedelta
 import streamlit as st
-
-KST = timezone(timedelta(hours=9))
+from app_constants import KST
 
 __all__ = [
     "KST",
@@ -96,7 +94,8 @@ def has_tag(tags: list, keyword: str) -> bool:
     return any(keyword in t for t in tags)
 
 
-def get_past_context(tags, supabase, user_id: str = ""):
+@st.cache_data(ttl=60)
+def get_past_context(tags, _supabase, user_id: str = ""):
     """현재 선택된 태그 중 가장 중요한 감정 태그를 찾아 과거 일기를 소환."""
     if not user_id:
         return ""
@@ -116,7 +115,7 @@ def get_past_context(tags, supabase, user_id: str = ""):
 
     try:
         response = (
-            supabase.table("journals")
+            _supabase.table("journals")
             .select("created_at, content")
             .eq("user_id", user_id)
             .like("tags", f"%{core_tag}%")

@@ -1,7 +1,8 @@
 import streamlit as st
 import json
 import datetime
-from db import to_kst_str, KST, get_recent_journals, get_real_inventory
+from db import to_kst_str, get_recent_journals, get_real_inventory
+from app_constants import KST
 from ui_components import card, banner
 from auth import validate_password
 

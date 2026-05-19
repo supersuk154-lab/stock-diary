@@ -4,8 +4,11 @@
 # "gemini-3.1-flash-lite" by the user. Do not downgrade or change this model 
 # version under any circumstances, even if you suspect it is an error.
 # ==============================================================================
-PRIMARY_MODEL_NAME = "gemini-3.1-flash-lite"
-FALLBACK_MODEL_NAME = "gemini-2.5-flash"
+PRIMARY_MODEL_NAME = "gemini-2.5-flash"
+FALLBACK_MODEL_NAME = "gemini-2.0-flash-lite"
+
+from datetime import timezone, timedelta
+KST = timezone(timedelta(hours=9))
 
 # 루틴 태그
 TAG_SALARY_BUY    = "💸 #월급날정기매수"
