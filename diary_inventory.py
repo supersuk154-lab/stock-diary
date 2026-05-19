@@ -8,6 +8,13 @@ from app_constants import PRIMARY_MODEL_NAME
 
 KR_MIN_WAGE_2026 = 10_320
 
+
+def _fmt_qty(qty: float) -> str:
+    """정수이면 콤마 포맷, 소수이면 최대 4자리 소수점 표시 (소수점 주식 대응)."""
+    if qty == int(qty):
+        return f"{int(qty):,}"
+    return f"{qty:.4f}".rstrip("0")
+
 def _get_active_wage() -> int:
     try:
         if "_custom_wage" in st.session_state:
@@ -345,7 +352,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                             border: 1px solid #F2F4F6;">
                     <div style="line-height:1.4; flex: 1; min-width: 0; padding-right: 16px;">
                         <div style="font-weight:700; font-size:1.05em; color:#333D4B; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="{item['종목']}">{item['종목']}</div>
-                        <div style="color:#8B95A1; font-size:0.85em; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{item['수량']:,.0f}주 보유</div>
+                        <div style="color:#8B95A1; font-size:0.85em; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{_fmt_qty(item['수량'])}주 보유</div>
                     </div>
                     <div style="text-align:right; line-height:1.4; flex-shrink: 0;">
                         <div>{price_html}</div>

@@ -15,6 +15,13 @@ from app_constants import (
 MODEL_NAME = PRIMARY_MODEL_NAME
 
 
+def _fmt_qty(qty: float) -> str:
+    """정수이면 콤마 포맷, 소수이면 최대 4자리 소수점 표시 (소수점 주식 대응)."""
+    if qty == int(qty):
+        return f"{int(qty):,}"
+    return f"{qty:.4f}".rstrip("0")
+
+
 def _render_step_upload(supabase, ai_client):
     st.subheader("📝 오늘의 주식 기록하기")
 
@@ -105,7 +112,7 @@ def _render_step_upload(supabase, ai_client):
                     "수량 (주)",
                     min_value=0.0001,
                     value=1.0,
-                    step=1.0,
+                    step=0.0001,
                     format="%.4g",
                     key="buy_qty_input",
                 )
@@ -161,7 +168,7 @@ def _render_step_upload(supabase, ai_client):
                     min_value=0.0001,
                     max_value=max_qty,
                     value=min(1.0, max_qty),
-                    step=1.0,
+                    step=0.0001,
                     format="%.4g",
                     key="sell_qty_input",
                 )
@@ -232,7 +239,7 @@ def _render_step_verify(supabase):
                 st.markdown(
                     f"**{stock}** &nbsp; {badge} &nbsp;"
                     f"<span style='color:gray;font-size:0.85em;'>"
-                    f"{int(info['old'])}주 → {int(info['new'])}주</span>",
+                    f"{_fmt_qty(info['old'])}주 → {_fmt_qty(info['new'])}주</span>",
                     unsafe_allow_html=True
                 )
                 col_qty, col_memo = st.columns([1, 2])
@@ -241,7 +248,8 @@ def _render_step_verify(supabase):
                         "변동 수량 (+매수 / -매도)",
                         value=float(change),
                         key=f"qty_{stock}",
-                        step=1.0
+                        step=0.0001,
+                        format="%.4g",
                     )
                 with col_memo:
                     st.text_input(
@@ -269,7 +277,7 @@ def _render_step_verify(supabase):
                     action   = "매수" if final_qty > 0 else "매도"
                     memo_str = f" (사유: {memo})" if memo else ""
                     st.session_state['daily_stock_list'].append(
-                        f"{stock} {abs(final_qty):.0f}주 {action}{memo_str}"
+                        f"{stock} {_fmt_qty(abs(final_qty))}주 {action}{memo_str}"
                     )
             st.session_state['current_step'] = 'ask_next'
             st.rerun()
