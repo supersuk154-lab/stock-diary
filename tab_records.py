@@ -113,7 +113,7 @@ def render_records_tab(supabase):
                     st.warning("⚠️ 이 일기를 삭제하면 **되돌릴 수 없어요.** 정말 삭제할까요?")
                     col_confirm, col_cancel = st.columns(2)
                     with col_confirm:
-                        if st.button("🗑️ 네, 삭제할게요", key=f"confirm_del_{journal_id}", type="primary", use_container_width=True):
+                        if st.button("네, 삭제할게요", key=f"confirm_del_{journal_id}", type="primary", use_container_width=True):
                             try:
                                 delete_journal(journal_id, user_id, supabase)
                                 st.session_state.pop("pending_delete_id", None)
@@ -129,6 +129,6 @@ def render_records_tab(supabase):
                     # 삭제 버튼 (우측 정렬)
                     _, col_del = st.columns([6, 1])
                     with col_del:
-                        if st.button("🗑️", key=f"del_btn_{journal_id}", help="이 일기 삭제", use_container_width=True):
+                        if st.button("삭제", key=f"del_btn_{journal_id}", help="이 일기 삭제", use_container_width=True):
                             st.session_state["pending_delete_id"] = journal_id
                             st.rerun()

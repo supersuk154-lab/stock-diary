@@ -56,7 +56,7 @@ def _render_step_upload(supabase, ai_client):
 
         st.image(image, caption='최종 분석용 이미지', use_container_width=True)
 
-        if st.button("✅ 가림막 설정 완료 및 정보 추출"):
+        if st.button("가림막 설정 완료 및 정보 추출"):
             # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
             import time
             last_call = st.session_state.get("last_ai_call", 0.0)
@@ -121,7 +121,7 @@ def _render_step_upload(supabase, ai_client):
                 placeholder="예: 월급날 정기매수, 급락 추가 매수",
                 key="buy_memo_input",
             )
-            buy_submitted = st.form_submit_button("🟢 매수 추가", type="primary", use_container_width=True)
+            buy_submitted = st.form_submit_button("매수 추가", type="primary", use_container_width=True)
 
         if buy_submitted:
             if not buy_stock or not buy_stock.strip():
@@ -177,7 +177,7 @@ def _render_step_upload(supabase, ai_client):
                     placeholder="예: 목표가 달성, 리밸런싱",
                     key="sell_memo_input",
                 )
-                sell_submitted = st.form_submit_button("🔴 매도 추가", type="primary", use_container_width=True)
+                sell_submitted = st.form_submit_button("매도 추가", type="primary", use_container_width=True)
 
             if sell_submitted:
                 memo_str = f" (사유: {sell_memo.strip()})" if sell_memo and sell_memo.strip() else ""
@@ -225,7 +225,7 @@ def _render_step_verify(supabase):
         st.warning("AI 응답을 해석하지 못했습니다. 다시 업로드하거나 직접 입력해주세요.")
     elif not diff_data:
         st.success("🎉 DB 잔고와 동일합니다. 새로 변동된 내역이 없습니다.")
-        if st.button("📝 매매 없이 감정 일기만 저장하기", key="diary_only_btn"):
+        if st.button("매매 없이 감정 일기만 저장하기", key="diary_only_btn"):
             st.session_state['current_step'] = 'final_analysis'
             st.rerun()
     else:
@@ -262,7 +262,7 @@ def _render_step_verify(supabase):
         col_save, col_cancel = st.columns([7, 3])
         with col_save:
             submit_btn = st.form_submit_button(
-                "💾 확정 및 장바구니 담기",
+                "확정 및 장바구니 담기",
                 type="primary",
                 disabled=not diff_data
             )
@@ -303,10 +303,10 @@ def _render_step_ask_next():
                     st.session_state['daily_stock_list'].pop(i)
                     st.rerun()
 
-    if st.button("📊 분석 시작하기", type="primary", use_container_width=True):
+    if st.button("분석 시작하기", type="primary", use_container_width=True):
         st.session_state['current_step'] = 'final_analysis'
         st.rerun()
-    if st.button("➕ 추가 입력하기", use_container_width=True):
+    if st.button("추가 입력하기", use_container_width=True):
         st.session_state['uploader_key'] += 1
         st.session_state['current_step'] = 'upload_mode'
         st.rerun()
@@ -537,7 +537,7 @@ def _render_step_final(supabase, ai_client, selected_tags):
         # [수정 #2] AI 생성 HTML을 sanitize 처리하여 XSS 방어
         st.markdown(sanitize_html(st.session_state['final_result']), unsafe_allow_html=True)
 
-    if st.button("🔄 처음으로 돌아가기"):
+    if st.button("처음으로 돌아가기"):
         st.session_state['uploader_key'] = st.session_state.get('uploader_key', 0) + 1
         for key in ['daily_stock_list', 'current_step', 'temp_extracted_data', 'balloons_shown',
                     'toast_shown', 'processed_image', 'current_tags', 'chat_messages',

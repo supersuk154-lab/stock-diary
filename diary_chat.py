@@ -89,9 +89,9 @@ def render_chat_section(supabase, ai_client) -> list:
             )
             col_send, col_clear = st.columns([7, 3])
             with col_send:
-                send_clicked = st.form_submit_button("💌 AI 멘토에게 보내기", type="primary", width="stretch")
+                send_clicked = st.form_submit_button("AI 멘토에게 보내기", type="primary", width="stretch")
             with col_clear:
-                clear_clicked = st.form_submit_button("🔄 대화 초기화", width="stretch")
+                clear_clicked = st.form_submit_button("대화 초기화", width="stretch")
     
         if clear_clicked:
             tags_str = ", ".join(selected_tags)

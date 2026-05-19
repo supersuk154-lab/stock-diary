@@ -104,7 +104,7 @@ def _render_admin_section(supabase):
             with st.expander("미리보기", expanded=False):
                 _render_report_html(html_content, height=600)
 
-            if st.button("📤 Supabase에 저장", type="primary", key="upload_report_btn"):
+            if st.button("Supabase에 저장", type="primary", key="upload_report_btn"):
                 try:
                     supabase.table("daily_reports").insert({
                         "title": title,

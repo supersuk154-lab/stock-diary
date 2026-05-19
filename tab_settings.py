@@ -19,7 +19,7 @@ def render_settings_tab(supabase):
     with st.form("change_pw_form", clear_on_submit=True):
         cp_new = st.text_input("새 비밀번호", type="password", placeholder="8자리 이상 (영문+숫자 포함)")
         cp_new2 = st.text_input("새 비밀번호 확인", type="password", placeholder="한번 더 입력해주세요")
-        cp_btn = st.form_submit_button("🔒 변경 사항 저장", type="primary")
+        cp_btn = st.form_submit_button("변경 사항 저장", type="primary")
         
     if cp_btn:
         if not cp_new or not cp_new2:
@@ -174,7 +174,7 @@ def render_settings_tab(supabase):
             key="ticker_editor",
         )
 
-        if st.button("💾 티커 변경사항 저장", type="primary"):
+        if st.button("티커 변경사항 저장", type="primary"):
             changed = 0
             errors  = []
             for _, row in df_edit.iterrows():
@@ -241,7 +241,7 @@ def render_settings_tab(supabase):
     with st.expander("🚨 나의 기록 데이터 영구 삭제"):
         st.caption("⚠️ 주의: 일기 및 매매 기록만 삭제됩니다. 계정(이메일/비밀번호)은 유지되므로 같은 계정으로 다시 로그인할 수 있습니다.")
         confirm = st.text_input('본인 확인을 위해 아래 입력창에 "삭제합니다"를 입력해주세요', key="delete_confirm")
-        if st.button("💥 내 기록 데이터 영구 삭제", type="primary"):
+        if st.button("내 기록 데이터 영구 삭제", type="primary"):
             if confirm == "삭제합니다":
                 try:
                     _uid = st.session_state["user_id"]

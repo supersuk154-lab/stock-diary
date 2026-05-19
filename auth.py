@@ -96,7 +96,7 @@ def _show_pin_entry(
             placeholder="숫자 4자리",
             label_visibility="collapsed",
         )
-        submit = st.form_submit_button("✅ 확인", type="primary", use_container_width=True)
+        submit = st.form_submit_button("확인", type="primary", use_container_width=True)
 
     if submit:
         if len(pin) != 4 or not pin.isdigit():
@@ -128,11 +128,11 @@ def _show_pin_entry(
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔑 이메일로 로그인", use_container_width=True):
+        if st.button("이메일로 로그인", use_container_width=True):
             st.session_state["_show_full_login"] = True
             st.rerun()
     with col2:
-        if st.button("🗑️ PIN 초기화", use_container_width=True):
+        if st.button("PIN 초기화", use_container_width=True):
             clear_pin_cache()
             st.session_state["_show_full_login"] = True
             st.rerun()
@@ -156,7 +156,7 @@ def _show_pin_setup(dev_mode: bool):
         )
         col1, col2 = st.columns(2)
         with col1:
-            save_btn = st.form_submit_button("✅ PIN 설정", type="primary", use_container_width=True)
+            save_btn = st.form_submit_button("PIN 설정", type="primary", use_container_width=True)
         with col2:
             skip_btn = st.form_submit_button("건너뛰기", use_container_width=True)
 
@@ -191,7 +191,7 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
         st.markdown("#### 로그인")
         email = st.text_input("이메일", placeholder="you@example.com")
         password = st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요")
-        login_btn = st.form_submit_button("✅ 로그인", type="primary", use_container_width=True)
+        login_btn = st.form_submit_button("로그인", type="primary", use_container_width=True)
 
     if login_btn:
         if not email or not password:
@@ -242,7 +242,7 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
             su_password2 = st.text_input(
                 "비밀번호 확인", type="password", placeholder="비밀번호를 한 번 더 입력하세요", key="su_pw2"
             )
-            signup_btn = st.form_submit_button("🎉 회원가입", type="primary", use_container_width=True)
+            signup_btn = st.form_submit_button("회원가입", type="primary", use_container_width=True)
 
             if signup_btn:
                 if not su_email or not su_password or not su_password2:
@@ -268,7 +268,7 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
         if step == "email":
             with st.form("reset_email_form"):
                 reset_email = st.text_input("가입한 이메일", placeholder="you@example.com")
-                send_btn = st.form_submit_button("📨 인증코드 받기", type="primary", use_container_width=True)
+                send_btn = st.form_submit_button("인증코드 받기", type="primary", use_container_width=True)
             if send_btn:
                 if not reset_email:
                     st.warning("이메일을 입력해주세요.")
@@ -290,7 +290,7 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
             st.info(f"📧 **{st.session_state.get('pw_reset_email')}** 으로 인증코드를 보냈습니다.")
             with st.form("reset_otp_form"):
                 otp_code = st.text_input("이메일로 받은 인증코드", max_chars=8, placeholder="6~8자리")
-                otp_btn = st.form_submit_button("✅ 확인", type="primary", use_container_width=True)
+                otp_btn = st.form_submit_button("확인", type="primary", use_container_width=True)
             if otp_btn:
                 if not otp_code:
                     st.warning("인증코드를 입력해주세요.")
@@ -319,7 +319,7 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
                     "새 비밀번호", type="password", placeholder="8자리 이상 (영문+숫자 포함)"
                 )
                 new_pw2 = st.text_input("새 비밀번호 확인", type="password")
-                save_btn = st.form_submit_button("🔒 비밀번호 변경", type="primary", use_container_width=True)
+                save_btn = st.form_submit_button("비밀번호 변경", type="primary", use_container_width=True)
             if save_btn:
                 if not new_pw or not new_pw2:
                     st.warning("비밀번호를 입력해주세요.")
