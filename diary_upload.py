@@ -11,7 +11,7 @@ from constants import (
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE
 )
 
-MODEL_NAME = "gemini-3.1-flash-lite"
+MODEL_NAME = "gemini-2.0-flash-lite"
 
 def render_upload_section(supabase, ai_client, selected_tags):
     """이미지 업로드 -> 데이터 검증 -> 최종 분석 섹션 흐름을 관리 및 렌더링합니다."""
@@ -80,15 +80,12 @@ def render_upload_section(supabase, ai_client, selected_tags):
                 with st.spinner('이미지에서 종목과 수량을 읽어오고 있습니다...'):
                     config = types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        response_schema={
-                            "type": "OBJECT",
-                            "additionalProperties": {"type": "NUMBER"},
-                        }
                     )
                     extract_prompt = (
                         "이 이미지는 MTS(모바일 트레이딩 앱) 잔고 화면입니다. "
                         "보유 중인 모든 종목명과 수량을 추출해줘. "
-                        "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해."
+                        "숫자에 콤마(,)나 단위는 빼고 순수 숫자만 사용해. "
+                        "반드시 {\"종목명\": 수량} 형태의 JSON 객체로만 답해줘. 예: {\"삼성전자\": 10, \"카카오\": 5}"
                     )
     
                     text, err = safe_generate(
