@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import re
 from PIL import Image, ImageDraw
 from google.genai import types
 from ai_helper import safe_generate
@@ -352,6 +353,9 @@ def _render_step_final(supabase, ai_client, selected_tags):
                             raw_name   = trade["stock_name"]
                             normalized = " ".join(raw_name.split())
                             ticker     = TICKER_MAP.get(normalized) or TICKER_MAP.get(raw_name)
+                            # TICKER_MAP에 없는 영문 종목명은 이름 자체를 US 티커로 시도
+                            if not ticker and re.match(r'^[A-Za-z0-9\.\s]+$', normalized.strip()):
+                                ticker = normalized.upper().replace(" ", "")
                             trade["_normalized_name"] = normalized
                             trade["_ticker"]          = ticker
                             if ticker:
@@ -363,18 +367,21 @@ def _render_step_final(supabase, ai_client, selected_tags):
                             ticker = trade["_ticker"]
                             if ticker:
                                 real_price = bulk_trade_prices.get(ticker) or 0.0
-                                currency   = "KRW" if ticker.endswith(".KS") else "USD"
+                                # .KS / .KQ = 한국 주식, 그 외 = 미국 주식
+                                if ticker.endswith(".KS") or ticker.endswith(".KQ"):
+                                    currency = "KRW"
+                                else:
+                                    currency = "USD"
                             else:
                                 real_price = 0.0
-                                currency   = "KRW"
+                                currency   = "KRW"  # ticker도 없으면 한국 주식으로 간주
 
-                            # 가격이 0 이하이면 평단가 왜곡 방지를 위해 저장 제외하고 사용자에게 안내
+                            # 가격을 불러오지 못한 경우: 건너뛰지 않고 평단가 0으로 저장
+                            # (보물창고에 종목은 표시되며, 평단가만 0으로 표기)
                             if real_price <= 0:
-                                # [수정 #6] 경고 메시지를 나중에 spinner 밖에서 표시
                                 if '_skipped_stocks' not in st.session_state:
                                     st.session_state['_skipped_stocks'] = []
                                 st.session_state['_skipped_stocks'].append(trade['_normalized_name'])
-                                continue
 
                             trades_to_insert.append({
                                 "stock_name": trade["_normalized_name"],
@@ -428,8 +435,8 @@ def _render_step_final(supabase, ai_client, selected_tags):
     skipped = st.session_state.pop('_skipped_stocks', [])
     if skipped:
         st.warning(
-            f"⚠️ **{len(skipped)}개 종목**의 현재가를 불러오지 못해 평단가 기록을 건너뛰었습니다: "
-            f"{', '.join(skipped)}\n\n나중에 '과거 기록 조회'에서 직접 수정해 주세요."
+            f"⚠️ **{len(skipped)}개 종목**의 현재가를 불러오지 못해 평단가 0으로 기록되었습니다: "
+            f"{', '.join(skipped)}\n\n보물창고에서 종목은 확인할 수 있으며, 평단가는 추후 매매 내역 재업로드 시 갱신됩니다."
         )
 
     if 'final_error' in st.session_state:
