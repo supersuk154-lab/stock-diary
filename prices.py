@@ -28,6 +28,14 @@ TICKER_MAP = {
     "TIGER 미국나스닥100": "133690.KS",
     "TIGER 코스피200": "102110.KS",
     "ARIRANG 미국S&P500": "269540.KS",
+    # 자동매칭 실패 종목 수동 보정
+    "KODEX 코리아소버린AI": "0115E0.KS",
+    "알파벳 A": "GOOGL",
+    "엔비디아": "NVDA",
+    "SPDR PORTFOLIO S&P 500 GROWTH": "SPYG",
+    "MARKETBETA RUSSELL 1000 GROWTH": "GGUS",
+    "SCHWAB US LARGE CAP GROWTH": "SCHG",
+    "JP MORGAN NASDAQ EQUITY PREMIUM": "JEPQ",
 }
 
 
