@@ -203,6 +203,43 @@ def render_settings_tab(supabase):
             )
 
         st.markdown("---")
+
+        # ── 전체 목록 한 번에 다운받기 ──────────────────────────
+        st.markdown("##### 📥 티커 전체 목록 한 번에 다운받는 곳")
+        col_bulk1, col_bulk2 = st.columns([1, 1])
+        with col_bulk1:
+            st.success(
+                "**🇰🇷 한국 ETF 전체 목록 — KRX 데이터 포털 (무료·공식)**\n\n"
+                "1. [data.krx.co.kr](https://data.krx.co.kr) 접속\n"
+                "2. 상단 메뉴 **기본통계 → 주식 → 세부안내 → ETF** 클릭\n"
+                "3. 조회 후 우측 상단 **다운로드(엑셀/CSV)** 클릭\n"
+                "4. 받은 파일의 **종목코드 6자리**에 `.KS` 붙이면 티커 완성\n\n"
+                "엑셀 수식: `=A2&\".KS\"`\n\n"
+                "💡 한국 ETF는 거의 전부 KOSPI 상장이라 `.KS` 통일"
+            )
+        with col_bulk2:
+            st.info(
+                "**🇺🇸 미국 ETF 전체 목록 — ETFdb.com (무료)**\n\n"
+                "1. [etfdb.com/etfs](https://etfdb.com/etfs/) 접속\n"
+                "2. 우측 상단 **Export** 버튼 → CSV 다운로드\n"
+                "3. `Ticker` 열이 야후파이낸스 티커와 동일 → 그대로 사용\n\n"
+                "**대안 — ETF.com**\n"
+                "1. [etf.com/etf-finder](https://www.etf.com/etf-finder) 접속\n"
+                "2. 필터 설정 후 **Download** 클릭\n\n"
+                "💡 미국 ETF 심볼은 1~5자리 영문이라\n"
+                "앱 자동 매칭으로 대부분 연결됩니다."
+            )
+
+        st.info(
+            "**실전 활용 흐름 (한국 ETF 기준)**\n\n"
+            "① KRX에서 전체 목록 CSV 다운로드\n"
+            "② 엑셀에서 종목코드 열 옆에 `=종목코드&\".KS\"` 수식으로 티커 열 생성\n"
+            "③ 이 앱의 **CSV 다운로드** 버튼으로 내 종목 목록 받기\n"
+            "④ 엑셀 `VLOOKUP`으로 내 종목명 기준 KRX 목록에서 티커 당겨오기\n"
+            "⑤ 완성된 CSV를 **CSV 업로드**로 올리면 한 번에 저장 완료"
+        )
+
+        st.markdown("---")
         st.warning(
             "**주의사항**\n\n"
             "- 티커를 잘못 입력하면 엉뚱한 종목 가격이 표시됩니다.\n"
