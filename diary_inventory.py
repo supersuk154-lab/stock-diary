@@ -3,6 +3,8 @@ import datetime
 from prices import _market_time_bucket, TICKER_MAP, get_realtime_prices_bulk, get_usd_to_krw
 from db import get_real_inventory, get_dividend_total
 from ui_components import banner
+from ai_helper import normalize_stock_name
+from app_constants import PRIMARY_MODEL_NAME
 
 KR_MIN_WAGE_2026 = 10_320
 
@@ -255,7 +257,7 @@ def get_daily_meal(daily_avg_krw: float) -> dict:
         return {"icon": "🍽️", "menu": "파인다이닝 코스", "desc": "자산이 매일 파인다이닝을 선물합니다. 진정한 FIRE!"}
 
 
-def render_inventory_section(supabase, user_id: str, zen_mode: bool):
+def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=None):
     """나의 보물함 실시간 주가 연동 및 배당 통계 렌더링."""
     st.markdown("### 📦 나의 보물함 (실시간)")
     
@@ -469,29 +471,156 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool):
                 st.markdown("**🏠 우리 집 주식 가족 분담금**")
                 render_family_contributions(my_portfolio, supabase, user_id)
     
-        with st.expander("🍯 배당금 직접 기록하기", expanded=False):
-            with st.form("dividend_form", clear_on_submit=True):
-                col_dname, col_damount = st.columns([2, 1])
-                with col_dname:
-                    div_stock = st.text_input("종목명", placeholder="예: 삼성전자")
-                with col_damount:
-                    div_amount = st.number_input("배당금 금액", min_value=0.0, step=100.0)
-                div_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
-                div_submit = st.form_submit_button("💰 배당금 기록 저장", type="primary")
-    
-                if div_submit and div_stock and div_amount > 0:
-                    try:
-                        supabase.table("trades").insert({
-                            "user_id":         user_id,
-                            "stock_name":      div_stock.strip(),
-                            "quantity":        0.0,
-                            "price":           0.0,
-                            "currency":        div_currency,
-                            "type":            "dividend",
-                            "dividend_amount": div_amount
-                        }).execute()
-                        get_dividend_total.clear()
-                        _sym = "원" if div_currency == "KRW" else "$"
-                        st.success(f"✅ {div_stock.strip()} 배당금 {div_amount:,.0f}{_sym} 기록 완료!")
-                    except Exception as _e:
-                        st.error(f"저장 실패: {_e}")
+        with st.expander("🍯 배당금 기록하기", expanded=False):
+
+            def _save_dividend(stock_name: str, amount: float, currency: str):
+                """배당금을 trades 테이블에 저장하는 공통 헬퍼."""
+                supabase.table("trades").insert({
+                    "user_id":         user_id,
+                    "stock_name":      stock_name,
+                    "quantity":        0.0,
+                    "price":           0.0,
+                    "currency":        currency,
+                    "type":            "dividend",
+                    "dividend_amount": amount,
+                }).execute()
+                get_dividend_total.clear()
+
+            # ── 섹션 A: 보유 종목 드롭다운 ───────────────────
+            if my_portfolio:
+                st.markdown("**🏦 보유 종목에서 선택**")
+                with st.form("dividend_dropdown_form", clear_on_submit=True):
+                    _dd_stock = st.selectbox(
+                        "종목",
+                        options=[item["종목"] for item in my_portfolio],
+                        label_visibility="collapsed",
+                    )
+                    col_a, col_b = st.columns([2, 1])
+                    with col_a:
+                        _dd_amount = st.number_input("배당금 금액", min_value=0.0, step=100.0)
+                    with col_b:
+                        _dd_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
+                    _dd_submit = st.form_submit_button(
+                        "💰 배당금 기록 저장", type="primary", use_container_width=True
+                    )
+
+                if _dd_submit:
+                    if _dd_amount > 0:
+                        try:
+                            _save_dividend(_dd_stock, _dd_amount, _dd_currency)
+                            _sym = "원" if _dd_currency == "KRW" else "$"
+                            st.success(f"✅ {_dd_stock} 배당금 {_dd_amount:,.0f}{_sym} 기록 완료!")
+                        except Exception as _e:
+                            st.error(f"저장 실패: {_e}")
+                    else:
+                        st.warning("배당금 금액을 입력해주세요.")
+
+                st.markdown(
+                    "<div style='margin:16px 0 8px; border-top:1px dashed #E5E8EB;'></div>"
+                    "<p style='font-size:0.85em; color:#8B95A1; margin:0 0 8px;'>위 목록에 없는 종목이라면?</p>",
+                    unsafe_allow_html=True,
+                )
+
+            # ── 섹션 B: 직접 입력 + AI 종목명 검증 ──────────
+            _ai_result = st.session_state.get("_div_ai_result")
+            _confirmed = st.session_state.get("_div_confirmed_name")
+
+            if _confirmed:
+                # Step 2: 승인된 종목명 + 금액 입력 + 저장
+                st.success(f"✅ 종목: **{_confirmed}**")
+                with st.form("manual_dividend_save_form", clear_on_submit=True):
+                    col_a2, col_b2 = st.columns([2, 1])
+                    with col_a2:
+                        _m_amount = st.number_input("배당금 금액", min_value=0.0, step=100.0)
+                    with col_b2:
+                        _m_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
+                    col_s, col_c = st.columns(2)
+                    with col_s:
+                        _m_submit = st.form_submit_button("💰 저장", type="primary", use_container_width=True)
+                    with col_c:
+                        _m_cancel = st.form_submit_button("✏️ 다시 입력", use_container_width=True)
+
+                if _m_submit:
+                    if _m_amount > 0:
+                        try:
+                            _save_dividend(_confirmed, _m_amount, _m_currency)
+                            _sym = "원" if _m_currency == "KRW" else "$"
+                            st.success(f"✅ {_confirmed} 배당금 {_m_amount:,.0f}{_sym} 기록 완료!")
+                            for _k in ["_div_ai_result", "_div_confirmed_name"]:
+                                st.session_state.pop(_k, None)
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"저장 실패: {_e}")
+                    else:
+                        st.warning("배당금 금액을 입력해주세요.")
+
+                if _m_cancel:
+                    for _k in ["_div_ai_result", "_div_confirmed_name"]:
+                        st.session_state.pop(_k, None)
+                    st.rerun()
+
+            elif _ai_result:
+                # Step 1: AI 결과 확인 화면
+                if _ai_result.get("name"):
+                    st.info(
+                        f'🤖 **"{_ai_result["name"]}"** 을 말씀하신 게 맞나요?\n\n'
+                        f'_{_ai_result.get("reason", "")}_'
+                    )
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ 맞아요, 이 이름으로 저장", use_container_width=True, type="primary"):
+                            st.session_state["_div_confirmed_name"] = _ai_result["name"]
+                            st.rerun()
+                    with col2:
+                        if st.button("✏️ 다시 입력", use_container_width=True, key="_div_retry_btn"):
+                            st.session_state.pop("_div_ai_result", None)
+                            st.rerun()
+                else:
+                    st.warning(
+                        f"⚠️ 종목을 파악하지 못했어요.\n\n"
+                        f"_{_ai_result.get('reason', '')}_\n\n"
+                        "정식 종목명으로 다시 입력해주세요."
+                    )
+                    if st.button("✏️ 다시 입력", use_container_width=True, key="_div_retry_fail_btn"):
+                        st.session_state.pop("_div_ai_result", None)
+                        st.rerun()
+
+            else:
+                # Step 0: 텍스트 입력 + AI 확인 버튼
+                st.text_input(
+                    "종목명 직접 입력",
+                    placeholder="예) 삼전, S&P ETF, SCHD, 애플 등 편하게 쓰세요",
+                    key="_div_raw_text",
+                )
+                if ai_client:
+                    if st.button("🤖 AI 종목명 확인하기", use_container_width=True):
+                        _raw = st.session_state.get("_div_raw_text", "").strip()
+                        if not _raw:
+                            st.warning("종목명을 먼저 입력해주세요.")
+                        else:
+                            with st.spinner("AI가 종목명을 확인 중입니다..."):
+                                _result = normalize_stock_name(ai_client, PRIMARY_MODEL_NAME, _raw)
+                            st.session_state["_div_ai_result"] = _result
+                            st.rerun()
+                else:
+                    # AI 없는 폴백: 그대로 저장
+                    with st.form("manual_direct_form", clear_on_submit=True):
+                        col_a3, col_b3 = st.columns([2, 1])
+                        with col_a3:
+                            _d_amount = st.number_input("배당금 금액", min_value=0.0, step=100.0)
+                        with col_b3:
+                            _d_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
+                        _d_submit = st.form_submit_button(
+                            "💰 그대로 저장", type="primary", use_container_width=True
+                        )
+                    if _d_submit:
+                        _raw_name = st.session_state.get("_div_raw_text", "").strip()
+                        if _raw_name and _d_amount > 0:
+                            try:
+                                _save_dividend(_raw_name, _d_amount, _d_currency)
+                                _sym = "원" if _d_currency == "KRW" else "$"
+                                st.success(f"✅ {_raw_name} 배당금 {_d_amount:,.0f}{_sym} 기록 완료!")
+                            except Exception as _e:
+                                st.error(f"저장 실패: {_e}")
+                        else:
+                            st.warning("종목명과 금액을 입력해주세요.")

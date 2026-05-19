@@ -124,4 +124,4 @@ def render_diary_tab(supabase, ai_client, dev_mode):
     st.markdown("<div style='margin:28px 0'></div>", unsafe_allow_html=True)
 
     # ── 3. 나의 보물함 (실시간 주가 연동) ────────────────
-    render_inventory_section(supabase, st.session_state["user_id"], zen_mode)
+    render_inventory_section(supabase, st.session_state["user_id"], zen_mode, ai_client)
