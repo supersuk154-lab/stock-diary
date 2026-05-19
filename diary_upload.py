@@ -85,21 +85,84 @@ def _render_step_upload(supabase, ai_client):
                     st.rerun()
 
     st.markdown("---")
-    st.write("아이콘이 없는 종목은 직접 입력해주세요.")
+    st.markdown("#### ✏️ 직접 입력")
+    st.caption("MTS 캡처 없이 직접 매수·매도 내역을 입력합니다.")
 
-    with st.form("manual_input_form", clear_on_submit=True):
-        col_text, col_btn = st.columns([4, 1])
-        with col_text:
-            user_text_input = st.text_input("직접 입력", placeholder="예: 삼성전자 10주 매수 완료",
-                                            label_visibility="collapsed")
-        with col_btn:
-            submitted = st.form_submit_button("추가")
+    tab_buy, tab_sell = st.tabs(["🟢 매수", "🔴 매도"])
 
-        if submitted and user_text_input:
-            st.session_state['daily_stock_list'].append(f"[직접 입력] {user_text_input}")
-            st.success(f"'{user_text_input}' 내용이 추가되었습니다.")
-            st.session_state['current_step'] = 'ask_next'
-            st.rerun()
+    # ── 매수 탭 ──────────────────────────────────────────
+    with tab_buy:
+        with st.form("manual_buy_form", clear_on_submit=True):
+            col_name, col_qty = st.columns([3, 2])
+            with col_name:
+                buy_stock = st.text_input(
+                    "종목명",
+                    placeholder="예: 삼성전자, SCHD",
+                    key="buy_stock_name",
+                )
+            with col_qty:
+                buy_qty = st.number_input(
+                    "수량 (주)",
+                    min_value=0.0001,
+                    value=1.0,
+                    step=1.0,
+                    format="%.4g",
+                    key="buy_qty_input",
+                )
+            buy_memo = st.text_input(
+                "매수 사유 (선택)",
+                placeholder="예: 월급날 정기매수, 급락 추가 매수",
+                key="buy_memo_input",
+            )
+            buy_submitted = st.form_submit_button("🟢 매수 추가", type="primary", use_container_width=True)
+
+        if buy_submitted:
+            if not buy_stock or not buy_stock.strip():
+                st.error("종목명을 입력해주세요.")
+            else:
+                memo_str = f" (사유: {buy_memo.strip()})" if buy_memo and buy_memo.strip() else ""
+                entry = f"{buy_stock.strip()} {buy_qty:.4g}주 매수{memo_str}"
+                st.session_state['daily_stock_list'].append(f"[직접 입력] {entry}")
+                st.success(f"✅ {entry} — 추가됐어요!")
+                st.session_state['current_step'] = 'ask_next'
+                st.rerun()
+
+    # ── 매도 탭 ──────────────────────────────────────────
+    with tab_sell:
+        with st.form("manual_sell_form", clear_on_submit=True):
+            col_name, col_qty = st.columns([3, 2])
+            with col_name:
+                sell_stock = st.text_input(
+                    "종목명",
+                    placeholder="예: 삼성전자, SCHD",
+                    key="sell_stock_name",
+                )
+            with col_qty:
+                sell_qty = st.number_input(
+                    "수량 (주)",
+                    min_value=0.0001,
+                    value=1.0,
+                    step=1.0,
+                    format="%.4g",
+                    key="sell_qty_input",
+                )
+            sell_memo = st.text_input(
+                "매도 사유 (선택)",
+                placeholder="예: 목표가 달성, 리밸런싱",
+                key="sell_memo_input",
+            )
+            sell_submitted = st.form_submit_button("🔴 매도 추가", type="primary", use_container_width=True)
+
+        if sell_submitted:
+            if not sell_stock or not sell_stock.strip():
+                st.error("종목명을 입력해주세요.")
+            else:
+                memo_str = f" (사유: {sell_memo.strip()})" if sell_memo and sell_memo.strip() else ""
+                entry = f"{sell_stock.strip()} {sell_qty:.4g}주 매도{memo_str}"
+                st.session_state['daily_stock_list'].append(f"[직접 입력] {entry}")
+                st.success(f"✅ {entry} — 추가됐어요!")
+                st.session_state['current_step'] = 'ask_next'
+                st.rerun()
 
 
 def _render_step_verify(supabase):
@@ -315,7 +378,7 @@ def _render_step_final(supabase, ai_client, selected_tags):
             )
 
             tag_text = " ".join(selected_tags) if selected_tags else ""
-            final_prompt = f"태그: {tag_text}\n\n사용자가 오늘 다음 종목들을 매수/확인했습니다:\n{all_data_str}\n\n이 내역을 바탕으로 전체적인 투자 평과 멘탈 관리 조언을 해줘."
+            final_prompt = f"태그: {tag_text}\n\n사용자가 오늘 다음 매수/매도 내역을 기록했습니다:\n{all_data_str}\n\n이 내역을 바탕으로 전체적인 투자 평과 멘탈 관리 조언을 해줘."
 
             final_text, err = safe_generate(
                 client=ai_client,
