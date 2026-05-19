@@ -8,7 +8,7 @@ from constants import (
     TAG_SHAKY, TAG_IMPULSE_TRADE, TAG_MISTAKE
 )
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 def render_chat_section(supabase, ai_client) -> list:
     """태그 선택 UI 및 AI 멘토와의 자유 대화 섹션을 렌더링하고, 선택된 태그 리스트를 반환합니다."""
