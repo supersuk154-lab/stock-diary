@@ -160,6 +160,57 @@ def render_settings_tab(supabase):
                 "보유 수량":       item["수량"],
             })
 
+        # ── 자동 매칭 버튼 ───────────────────────────────────
+        col_auto, col_info = st.columns([2, 3])
+        with col_auto:
+            auto_btn = st.button(
+                "야후파이낸스 기준 자동 매칭",
+                type="primary",
+                use_container_width=True,
+                help="미연결 종목의 티커를 KRX 데이터베이스와 야후파이낸스 규칙으로 자동으로 찾아 저장합니다.",
+            )
+        with col_info:
+            st.caption("⚡ 미연결(⚠️) 종목만 대상 · 이미 연결된 종목은 건드리지 않습니다.")
+
+        if auto_btn:
+            targets = [item for item in inventory if not item.get("ticker")]
+            if not targets:
+                banner("모든 종목이 이미 티커와 연결되어 있습니다!", type="success")
+            else:
+                matched, unmatched = [], []
+                with st.spinner(f"{len(targets)}개 종목 티커 자동 조회 중... (KRX 조회 포함, 최초 1회는 오래 걸릴 수 있어요)"):
+                    for item in targets:
+                        found = resolve_ticker(item["종목"])
+                        if found:
+                            try:
+                                supabase.table("trades") \
+                                    .update({"ticker": found}) \
+                                    .eq("user_id", _uid) \
+                                    .eq("stock_name", item["종목"]) \
+                                    .execute()
+                                matched.append(f"{item['종목']} → **{found}**")
+                            except Exception:
+                                unmatched.append(item["종목"])
+                        else:
+                            unmatched.append(item["종목"])
+
+                get_real_inventory.clear()
+
+                if matched:
+                    banner(
+                        f"✅ {len(matched)}개 종목 자동 연결 완료!\n\n" + "\n\n".join(matched),
+                        type="success",
+                    )
+                if unmatched:
+                    banner(
+                        f"⚠️ {len(unmatched)}개 종목은 자동 매칭 실패 — 아래 표에서 직접 입력해 주세요:\n\n"
+                        + ", ".join(unmatched),
+                        type="warning",
+                    )
+                st.rerun()
+
+        st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+
         df_orig = pd.DataFrame(rows)
         df_edit = st.data_editor(
             df_orig,
