@@ -163,7 +163,7 @@ def get_real_inventory(user_id: str, _supabase):
     try:
         response = (
             _supabase.table("trades")
-            .select("stock_name, quantity, price, currency, type")
+            .select("stock_name, quantity, price, currency, type, ticker")
             .eq("user_id", user_id)
             .neq("type", "dividend")
             .execute()
@@ -180,6 +180,7 @@ def get_real_inventory(user_id: str, _supabase):
             price = float(t.get("price", 0))
             currency = t.get("currency", "KRW")
             trade_type = t.get("type", "buy")
+            ticker = t.get("ticker")
 
             if not name or raw_qty == 0:
                 continue
@@ -187,7 +188,14 @@ def get_real_inventory(user_id: str, _supabase):
             qty = -abs(raw_qty) if trade_type == "sell" else abs(raw_qty)
 
             if name not in inventory_map:
-                inventory_map[name] = {"현재수량": 0, "총매수수량": 0, "총매수금액": 0, "통화": currency}
+                inventory_map[name] = {
+                    "현재수량": 0, "총매수수량": 0, "총매수금액": 0,
+                    "통화": currency, "ticker": ticker,
+                }
+
+            # 기존 레코드에 ticker가 없고 새 레코드에 있으면 업데이트
+            if not inventory_map[name]["ticker"] and ticker:
+                inventory_map[name]["ticker"] = ticker
 
             if qty > 0:
                 inventory_map[name]["총매수수량"] += qty
@@ -203,7 +211,8 @@ def get_real_inventory(user_id: str, _supabase):
                     "종목": name,
                     "수량": data["현재수량"],
                     "평단가": avg_price,
-                    "통화": data["통화"]
+                    "통화": data["통화"],
+                    "ticker": data["ticker"],
                 })
         return result
     except Exception as e:

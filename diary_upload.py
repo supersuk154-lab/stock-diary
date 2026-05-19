@@ -4,7 +4,7 @@ import re
 from PIL import Image, ImageDraw
 from google.genai import types
 from ai_helper import safe_generate
-from prices import _market_time_bucket, get_realtime_prices_bulk, TICKER_MAP
+from prices import _market_time_bucket, get_realtime_prices_bulk, resolve_ticker
 from db import get_real_inventory, get_past_context, get_recent_journals, has_tag
 from ui_components import sanitize_html
 from app_constants import (
@@ -439,10 +439,7 @@ def _render_step_final(supabase, ai_client, selected_tags):
                         for trade in extracted_trades:
                             raw_name   = trade["stock_name"]
                             normalized = " ".join(raw_name.split())
-                            ticker     = TICKER_MAP.get(normalized) or TICKER_MAP.get(raw_name)
-                            # TICKER_MAP에 없는 영문 종목명은 이름 자체를 US 티커로 시도
-                            if not ticker and re.match(r'^[A-Za-z0-9\.\s]+$', normalized.strip()):
-                                ticker = normalized.upper().replace(" ", "")
+                            ticker     = resolve_ticker(normalized)
                             trade["_normalized_name"] = normalized
                             trade["_ticker"]          = ticker
                             if ticker:
@@ -475,7 +472,8 @@ def _render_step_final(supabase, ai_client, selected_tags):
                                 "quantity":   abs(trade["quantity"]),
                                 "price":      real_price,
                                 "currency":   currency,
-                                "type":       trade.get("type", "buy")
+                                "type":       trade.get("type", "buy"),
+                                "ticker":     trade["_ticker"],
                             })
 
                     # DB 실제 저장 (트랜잭션 롤백 포함)

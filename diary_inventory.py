@@ -1,6 +1,6 @@
 import streamlit as st
 import datetime
-from prices import _market_time_bucket, TICKER_MAP, get_realtime_prices_bulk, get_usd_to_krw
+from prices import _market_time_bucket, resolve_ticker, get_realtime_prices_bulk, get_usd_to_krw
 from db import get_real_inventory, get_dividend_total
 from ui_components import banner
 from ai_helper import normalize_stock_name
@@ -276,21 +276,23 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
         if not my_portfolio:
             st.info("아직 텅 비어있네요! 💸 이번 달은 삼성전자나 Alphabet 같은 든든한 자산을 모아 첫 기록을 남겨보는 건 어떨까요?")
         else:
-            all_tickers = tuple(
-                TICKER_MAP[item["종목"]]
-                for item in my_portfolio
-                if item["종목"] in TICKER_MAP
-            )
+            # DB 저장 ticker 우선, 없으면 runtime resolve (pykrx + US 휴리스틱)
+            item_tickers: dict = {}
+            for item in my_portfolio:
+                item_tickers[item["종목"]] = (
+                    item.get("ticker") or resolve_ticker(item["종목"])
+                )
+
+            all_tickers = tuple(t for t in item_tickers.values() if t)
             _tb = _market_time_bucket()
             bulk_prices = get_realtime_prices_bulk(all_tickers, time_bucket=_tb) if all_tickers else {}
             usd_rate = get_usd_to_krw(time_bucket=_tb)
-    
+
             # 총 평가 자산 계산
             total_krw = 0.0
             all_priced = True
             for _item in my_portfolio:
-                # pyrefly: ignore [bad-argument-type]
-                _ticker = TICKER_MAP.get(_item["종목"])
+                _ticker = item_tickers.get(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
                 if _price and _item["수량"] > 0:
                     if _item["통화"] == "KRW":
@@ -313,8 +315,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
     
             rows_html = ""
             for item in my_portfolio:
-                # pyrefly: ignore [bad-argument-type]
-                ticker = TICKER_MAP.get(item["종목"])
+                ticker = item_tickers.get(item["종목"])
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
                 currency = "원" if item["통화"] == "KRW" else "$"
@@ -361,7 +362,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                 </div>"""
     
             st.markdown(rows_html, unsafe_allow_html=True)
-            st.caption("💡 '티커 미등록' 종목은 app.py의 TICKER_MAP에 야후파이낸스 코드를 추가하면 실시간 연동됩니다.")
+            st.caption("💡 '티커 미등록' 종목은 새로 매수 기록 시 자동 등록됩니다. 한국 주식은 KRX 전체 조회, 미국 주식은 영문 종목명을 그대로 티커로 시도합니다.")
     
             # 누적 배당금 요약
             div_totals = get_dividend_total(user_id, supabase)
