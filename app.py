@@ -22,6 +22,7 @@ from auth import show_login
 from tab_diary import render_diary_tab
 from tab_records import render_records_tab
 from tab_settings import render_settings_tab
+from tab_report import render_report_tab
 # [변경] 이미지 처리 라이브러리는 그대로
 from PIL import Image, ImageDraw
 
@@ -372,11 +373,13 @@ with st.expander("📖 사용 방법 보기", expanded=False):
 
 st.markdown("---")
 
-tab1, tab2, tab3 = st.tabs(["📝 일기 작성", "📚 과거 기록 조회", "⚙️ 설정 및 백업"])
+tab1, tab2, tab3, tab4 = st.tabs(["📝 일기 작성", "📚 과거 기록 조회", "📰 투자 리포트", "⚙️ 설정 및 백업"])
 
 with tab1:
     render_diary_tab(supabase, ai_client, DEV_MODE)
 with tab2:
     render_records_tab(supabase)
 with tab3:
+    render_report_tab(supabase, st.secrets)
+with tab4:
     render_settings_tab(supabase)
