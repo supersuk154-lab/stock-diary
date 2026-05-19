@@ -84,61 +84,150 @@ def render_settings_tab(supabase):
         unsafe_allow_html=True,
     )
 
-    with st.expander("📖 티커 찾는 방법 (처음이라면 꼭 읽어보세요)", expanded=False):
+    with st.expander("📖 티커 찾는 방법 — 미장 / 국장 / 한국 ETF 완전 매뉴얼", expanded=False):
+        st.markdown("#### 야후파이낸스 티커란?")
         st.markdown(
-            "### 야후파이낸스 티커란?\n"
-            "야후파이낸스는 전 세계 주식의 실시간 가격을 제공하는 사이트입니다. "
-            "이 앱은 야후파이낸스 API로 가격을 가져오기 때문에, **야후파이낸스 기준의 티커 코드**가 필요합니다.\n\n"
+            "이 앱은 **Yahoo Finance API**로 실시간 가격을 가져옵니다. "
+            "따라서 내 종목의 야후파이낸스 티커 코드를 정확히 입력해야 가격이 표시됩니다. "
+            "아래 시장별 안내를 따라 티커를 찾아보세요."
         )
-        st.info(
-            "**🔍 티커 찾는 방법 (공통)**\n\n"
-            "1. [finance.yahoo.com](https://finance.yahoo.com) 접속\n"
-            "2. 검색창에 종목명 입력 (예: 삼성전자, SCHD)\n"
-            "3. 검색 결과에서 내 종목 클릭\n"
-            "4. URL 또는 종목명 옆에 표시된 **굵은 영문+숫자 코드**가 티커입니다\n\n"
-            "예) 삼성전자 검색 → URL이 `/quote/005930.KS` → 티커는 **005930.KS**"
-        )
-        col_kr, col_us = st.columns(2)
-        with col_kr:
-            st.success(
-                "**🇰🇷 한국 주식 형식**\n\n"
-                "```\n"
-                "KOSPI 종목: 숫자6자리.KS\n"
-                "  삼성전자   → 005930.KS\n"
-                "  카카오     → 035720.KS\n"
-                "  SK하이닉스 → 000660.KS\n\n"
-                "KOSDAQ 종목: 숫자6자리.KQ\n"
-                "  에코프로   → 086520.KQ\n"
-                "  셀트리온   → 068270.KQ\n"
-                "```\n\n"
-                "💡 종목코드 6자리는 **네이버페이 증권** 또는 "
-                "**한국거래소(krx.co.kr)** 에서도 확인 가능합니다."
-            )
-        with col_us:
+
+        st.markdown("---")
+
+        # ── 미국 주식 ──────────────────────────────────────────
+        st.markdown("##### 🇺🇸 미장 (미국 주식 · 미국 ETF)")
+        col_us1, col_us2 = st.columns([1, 1])
+        with col_us1:
             st.info(
-                "**🇺🇸 미국 주식/ETF 형식**\n\n"
+                "**형식:** 영문 심볼 그대로 입력\n\n"
                 "```\n"
-                "그냥 심볼 그대로 입력:\n"
-                "  애플       → AAPL\n"
-                "  엔비디아   → NVDA\n"
-                "  S&P500 ETF → VOO\n"
-                "  배당 ETF   → SCHD\n"
-                "  나스닥 ETF → QQQ\n"
-                "  버크셔B    → BRK-B\n"
+                "애플        → AAPL\n"
+                "엔비디아     → NVDA\n"
+                "마이크로소프트 → MSFT\n"
+                "테슬라       → TSLA\n"
+                "버크셔(B)    → BRK-B\n"
                 "```\n\n"
-                "💡 영문 심볼 1~5자리는 대부분 **자동 연결**됩니다. "
-                "연결이 안 된 경우만 직접 입력하세요."
+                "**미국 ETF:**\n"
+                "```\n"
+                "S&P500      → VOO  또는 SPY\n"
+                "나스닥100   → QQQ\n"
+                "배당성장     → SCHD\n"
+                "커버드콜     → JEPI\n"
+                "월배당      → QYLD\n"
+                "```"
             )
+        with col_us2:
+            st.success(
+                "**어디서 찾나요?**\n\n"
+                "**방법 ①** Yahoo Finance 직접 검색\n"
+                "1. [finance.yahoo.com](https://finance.yahoo.com) 접속\n"
+                "2. 검색창에 종목명 입력 (영문 권장)\n"
+                "3. URL의 `/quote/XXXX` 부분이 티커\n\n"
+                "**방법 ②** ETF.com (ETF 전용)\n"
+                "- [etf.com](https://www.etf.com) 에서 ETF 검색\n"
+                "- 티커가 크게 표시됨\n\n"
+                "**방법 ③** 자동 연결 활용\n"
+                "- 영문 1~5자리 심볼은 **앱이 자동 연결**\n"
+                "- 자동 매칭 버튼 먼저 눌러보세요!"
+            )
+
+        st.markdown("---")
+
+        # ── 한국 주식 ──────────────────────────────────────────
+        st.markdown("##### 🇰🇷 국장 (한국 주식)")
+        col_kr1, col_kr2 = st.columns([1, 1])
+        with col_kr1:
+            st.info(
+                "**형식:** `종목코드6자리` + `.KS` 또는 `.KQ`\n\n"
+                "```\n"
+                "KOSPI 종목 → 숫자6자리.KS\n"
+                "  삼성전자   → 005930.KS\n"
+                "  SK하이닉스 → 000660.KS\n"
+                "  카카오     → 035720.KS\n"
+                "  LG에너지솔루션 → 373220.KS\n\n"
+                "KOSDAQ 종목 → 숫자6자리.KQ\n"
+                "  에코프로   → 086520.KQ\n"
+                "  알테오젠   → 196170.KQ\n"
+                "  HLB      → 028300.KQ\n"
+                "```"
+            )
+        with col_kr2:
+            st.success(
+                "**어디서 종목코드 6자리를 찾나요?**\n\n"
+                "**방법 ①** 네이버페이 증권 (가장 쉬움)\n"
+                "1. [finance.naver.com](https://finance.naver.com) 접속\n"
+                "2. 종목 검색 후 클릭\n"
+                "3. URL의 숫자 6자리가 종목코드\n"
+                "   예) `/item/main.naver?code=005930`\n\n"
+                "**방법 ②** 한국거래소 (KRX)\n"
+                "1. [data.krx.co.kr](https://data.krx.co.kr) 접속\n"
+                "2. 기본통계 → 주식 → 종목검색\n"
+                "3. 종목코드 6자리 확인\n\n"
+                "**방법 ③** MTS 앱\n"
+                "- 보유 종목 상세에서 종목코드 확인 가능"
+            )
+
+        st.markdown("---")
+
+        # ── 한국 ETF ──────────────────────────────────────────
+        st.markdown("##### 🏦 한국 ETF (KODEX, TIGER, ACE 등)")
+        col_etf1, col_etf2 = st.columns([1, 1])
+        with col_etf1:
+            st.info(
+                "**형식:** `ETF코드6자리.KS` (대부분 KOSPI 상장)\n\n"
+                "```\n"
+                "KODEX 200       → 069500.KS\n"
+                "KODEX 삼성그룹  → 102780.KS\n"
+                "TIGER 미국S&P500 → 360750.KS\n"
+                "TIGER 미국나스닥100 → 133690.KS\n"
+                "ACE 미국배당다우존스 → 402970.KS\n"
+                "KODEX 배당성장   → 211560.KS\n"
+                "TIGER 차이나CSI300 → 192090.KS\n"
+                "```\n\n"
+                "KOSDAQ 상장 ETF는 드물지만 `.KQ` 사용"
+            )
+        with col_etf2:
+            st.success(
+                "**어디서 한국 ETF 코드를 찾나요?**\n\n"
+                "**방법 ①** 네이버페이 증권 ETF 탭 (추천)\n"
+                "1. [finance.naver.com/fund/etf](https://finance.naver.com/fund/etfItemList.naver) 접속\n"
+                "2. ETF명 검색 후 클릭\n"
+                "3. URL에서 6자리 코드 확인 후 `.KS` 붙이기\n\n"
+                "**방법 ②** 한국거래소 ETF 정보\n"
+                "1. [etf.krx.co.kr](https://etf.krx.co.kr) 접속\n"
+                "2. ETF명 검색 → 종목코드 확인\n\n"
+                "**방법 ③** 자동 매칭 버튼 활용\n"
+                "- KODEX, TIGER 등 유명 ETF는\n"
+                "  **자동 매칭으로 연결**되는 경우 많음\n"
+                "- 자동 매칭 먼저 시도해 보세요!"
+            )
+
+        st.markdown("---")
         st.warning(
-            "⚠️ **주의사항**\n\n"
-            "- 티커를 잘못 입력하면 엉뚱한 종목 가격이 표시될 수 있습니다.\n"
-            "- 저장 전 야후파이낸스에서 해당 티커로 검색해 맞는지 꼭 확인하세요.\n"
-            "- 입력 후 보물함에서 가격이 뜨지 않으면 티커가 틀린 겁니다."
+            "**주의사항**\n\n"
+            "- 티커를 잘못 입력하면 엉뚱한 종목 가격이 표시됩니다.\n"
+            "- 저장 전 Yahoo Finance에서 해당 티커로 검색해 맞는지 꼭 확인하세요.\n"
+            "- 보물함에서 가격이 뜨지 않으면 티커가 잘못된 겁니다 (빈칸으로 다시 저장하면 초기화)."
         )
 
     # ── 티커 편집 테이블 ──────────────────────────────────
     _uid = st.session_state.get("user_id", "")
     inventory = get_real_inventory(_uid, supabase) if _uid else []
+
+    # 자동 매칭 결과 표시 (rerun 후 세션에서 꺼내서 보여줌)
+    if "_ticker_auto_result" in st.session_state:
+        result = st.session_state.pop("_ticker_auto_result")
+        if result.get("matched"):
+            banner(
+                f"✅ {len(result['matched'])}개 종목 자동 연결 완료!\n\n" + "\n\n".join(result["matched"]),
+                type="success",
+            )
+        if result.get("unmatched"):
+            banner(
+                f"⚠️ {len(result['unmatched'])}개 종목은 자동 매칭 실패 — 아래 표에서 직접 입력해 주세요:\n\n"
+                + ", ".join(result["unmatched"]),
+                type="warning",
+            )
 
     if not inventory:
         banner("현재 보물함에 보유 종목이 없습니다. 매수 기록을 먼저 추가해 주세요.", type="info")
@@ -160,8 +249,8 @@ def render_settings_tab(supabase):
                 "보유 수량":       item["수량"],
             })
 
-        # ── 자동 매칭 버튼 ───────────────────────────────────
-        col_auto, col_info = st.columns([2, 3])
+        # ── 액션 버튼 영역 ───────────────────────────────────
+        col_auto, col_dl, col_info = st.columns([2, 2, 3])
         with col_auto:
             auto_btn = st.button(
                 "야후파이낸스 기준 자동 매칭",
@@ -169,8 +258,78 @@ def render_settings_tab(supabase):
                 use_container_width=True,
                 help="미연결 종목의 티커를 KRX 데이터베이스와 야후파이낸스 규칙으로 자동으로 찾아 저장합니다.",
             )
+        with col_dl:
+            # CSV 다운로드 — 현재 티커 상태 전체 내보내기
+            import io as _io
+            _csv_rows = []
+            for _r in rows:
+                _csv_rows.append({"종목명": _r["종목명"], "야후파이낸스_티커": _r["티커"]})
+            _csv_df = pd.DataFrame(_csv_rows)
+            _csv_buf = _io.StringIO()
+            _csv_df.to_csv(_csv_buf, index=False, encoding="utf-8-sig")
+            st.download_button(
+                label="CSV 다운로드",
+                data=_csv_buf.getvalue().encode("utf-8-sig"),
+                file_name="ticker_list.csv",
+                mime="text/csv",
+                use_container_width=True,
+                help="종목명·티커 목록을 CSV로 받아 엑셀에서 편집한 뒤 아래 업로드 버튼으로 올리세요.",
+            )
         with col_info:
-            st.caption("⚡ 미연결(⚠️) 종목만 대상 · 이미 연결된 종목은 건드리지 않습니다.")
+            st.caption("⚡ 자동 매칭은 미연결(⚠️) 종목만 · CSV로 일괄 수정도 가능합니다.")
+
+        # ── CSV 업로드 (일괄 티커 등록) ─────────────────────
+        with st.expander("CSV 파일로 티커 일괄 등록", expanded=False):
+            st.markdown(
+                "**사용법**\n"
+                "1. 위 **CSV 다운로드** 버튼으로 현재 목록을 내려받습니다.\n"
+                "2. 엑셀(또는 구글 시트)로 열어 `야후파이낸스_티커` 열을 채웁니다.\n"
+                "3. CSV로 저장한 뒤 아래에 업로드하면 자동으로 반영됩니다.\n\n"
+                "형식: `종목명` 열이 기준 키입니다. 종목명이 정확히 일치해야 저장됩니다."
+            )
+            uploaded_csv = st.file_uploader(
+                "티커가 입력된 CSV 파일을 업로드하세요",
+                type=["csv"],
+                key="ticker_csv_uploader",
+            )
+            if uploaded_csv is not None:
+                try:
+                    import io as _io2
+                    _up_df = pd.read_csv(_io2.BytesIO(uploaded_csv.read()))
+                    # 컬럼 이름 정규화
+                    _up_df.columns = [c.strip() for c in _up_df.columns]
+                    if "종목명" not in _up_df.columns or "야후파이낸스_티커" not in _up_df.columns:
+                        banner("CSV 형식 오류: '종목명'과 '야후파이낸스_티커' 컬럼이 필요합니다.", type="error")
+                    else:
+                        st.dataframe(_up_df, use_container_width=True, hide_index=True)
+                        if st.button("이 내용으로 티커 일괄 저장", type="primary", key="csv_upload_save_btn"):
+                            saved, skipped, errors = 0, 0, []
+                            for _, _row in _up_df.iterrows():
+                                _name = str(_row.get("종목명", "")).strip()
+                                _ticker = str(_row.get("야후파이낸스_티커", "")).strip().upper()
+                                if not _name or _ticker in ("", "NAN", "NONE"):
+                                    skipped += 1
+                                    continue
+                                try:
+                                    supabase.table("trades") \
+                                        .update({"ticker": _ticker}) \
+                                        .eq("user_id", _uid) \
+                                        .eq("stock_name", _name) \
+                                        .execute()
+                                    saved += 1
+                                except Exception as _e:
+                                    errors.append(f"{_name}: {_e}")
+                            get_real_inventory.clear()
+                            if errors:
+                                banner(f"일부 저장 실패:\n" + "\n".join(errors), type="error")
+                            else:
+                                msg = f"✅ {saved}개 종목 티커 저장 완료!"
+                                if skipped:
+                                    msg += f" ({skipped}개 빈 티커는 건너뜀)"
+                                banner(msg, type="success")
+                            st.rerun()
+                except Exception as _e:
+                    banner(f"CSV 파일 읽기 실패: {_e}", type="error")
 
         if auto_btn:
             targets = [item for item in inventory if not item.get("ticker")]
@@ -195,18 +354,10 @@ def render_settings_tab(supabase):
                             unmatched.append(item["종목"])
 
                 get_real_inventory.clear()
-
-                if matched:
-                    banner(
-                        f"✅ {len(matched)}개 종목 자동 연결 완료!\n\n" + "\n\n".join(matched),
-                        type="success",
-                    )
-                if unmatched:
-                    banner(
-                        f"⚠️ {len(unmatched)}개 종목은 자동 매칭 실패 — 아래 표에서 직접 입력해 주세요:\n\n"
-                        + ", ".join(unmatched),
-                        type="warning",
-                    )
+                st.session_state["_ticker_auto_result"] = {
+                    "matched": matched,
+                    "unmatched": unmatched,
+                }
                 st.rerun()
 
         st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
