@@ -2,7 +2,7 @@ import streamlit as st
 from google.genai import types
 from ai_helper import safe_generate
 from db import get_past_context
-from constants import (
+from app_constants import (
     TAG_SALARY_BUY, TAG_DIVIDEND, TAG_PRAISE_PAST,
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK,
     TAG_SHAKY, TAG_IMPULSE_TRADE, TAG_MISTAKE, PRIMARY_MODEL_NAME

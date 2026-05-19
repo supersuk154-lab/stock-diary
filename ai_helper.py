@@ -1,7 +1,7 @@
 import logging
 from google import genai
 from google.genai import types
-from constants import FALLBACK_MODEL_NAME
+from app_constants import FALLBACK_MODEL_NAME
 
 logger = logging.getLogger(__name__)
 

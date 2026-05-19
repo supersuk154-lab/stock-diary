@@ -6,7 +6,7 @@ from ai_helper import safe_generate
 from prices import _market_time_bucket, get_realtime_prices_bulk, TICKER_MAP
 from db import get_real_inventory, get_past_context, get_recent_journals, has_tag
 from ui_components import sanitize_html
-from constants import (
+from app_constants import (
     TAG_PRAISE_PAST, TAG_DIVIDEND, TAG_SHAKY, TAG_IMPULSE_TRADE,
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE, PRIMARY_MODEL_NAME
 )

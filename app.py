@@ -212,7 +212,7 @@ toss_style = """
 st.markdown(toss_style, unsafe_allow_html=True)
 # ---------------------------------------------------------
 
-from constants import PRIMARY_MODEL_NAME
+from app_constants import PRIMARY_MODEL_NAME
 MODEL_NAME = PRIMARY_MODEL_NAME
 
 # ==========================================
