@@ -1,5 +1,7 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import logging
+import base64
 # [수정] 새로운 google-genai SDK 임포트
 from google import genai
 from google.genai import types
@@ -32,7 +34,47 @@ from supabase import create_client, Client
 
 # ==========================================
 # 2. 앱 기본 설정
-st.set_page_config(page_title="AI 주식 다이어리", page_icon="📈", layout="centered")
+_icon_path = Path(__file__).parent / "assets" / "icon.png"
+if _icon_path.exists():
+    _pil_icon = Image.open(_icon_path)
+    st.set_page_config(page_title="AI 주식 다이어리", page_icon=_pil_icon, layout="centered")
+    # base64 인코딩 → 외부 URL 없이 iOS/Android 홈 화면 아이콘 주입
+    _icon_b64 = base64.b64encode(_icon_path.read_bytes()).decode()
+    _icon_data_url = f"data:image/png;base64,{_icon_b64}"
+    components.html(f"""
+    <script>
+        const head = document.getElementsByTagName('head')[0];
+
+        const metaTitle = document.createElement('meta');
+        metaTitle.name = "apple-mobile-web-app-title";
+        metaTitle.content = "주식일기";
+        head.appendChild(metaTitle);
+
+        const appleIcon = document.createElement('link');
+        appleIcon.rel = "apple-touch-icon";
+        appleIcon.href = "{_icon_data_url}";
+        head.appendChild(appleIcon);
+
+        const androidIcon = document.createElement('link');
+        androidIcon.rel = "icon";
+        androidIcon.type = "image/png";
+        androidIcon.sizes = "192x192";
+        androidIcon.href = "{_icon_data_url}";
+        head.appendChild(androidIcon);
+
+        const metaCap = document.createElement('meta');
+        metaCap.name = "apple-mobile-web-app-capable";
+        metaCap.content = "yes";
+        head.appendChild(metaCap);
+
+        const metaAndroid = document.createElement('meta');
+        metaAndroid.name = "mobile-web-app-capable";
+        metaAndroid.content = "yes";
+        head.appendChild(metaAndroid);
+    </script>
+    """, width=0, height=0)
+else:
+    st.set_page_config(page_title="AI 주식 다이어리", page_icon="📈", layout="centered")
 
 # ==========================================
 # 🧠 전역 세션 상태 초기화 (탭 진입 전 보장)
