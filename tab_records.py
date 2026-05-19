@@ -1,6 +1,6 @@
 import streamlit as st
 import html
-from db import to_kst_str, get_recent_journals, calculate_scores
+from db import to_kst_str, get_recent_journals, calculate_scores, delete_journal
 from ui_components import card, banner, sanitize_html, render_radar_chart
 
 def render_records_tab(supabase):
@@ -61,6 +61,7 @@ def render_records_tab(supabase):
             tags_in_row = r.get("tags") or ""
             content = r.get("content") or ""
             feedback = r.get("ai_feedback") or ""
+            journal_id = r.get("id")
 
             if filter_tag and filter_tag not in tags_in_row:
                 continue
@@ -78,10 +79,10 @@ def render_records_tab(supabase):
             date_display = created_at[:-3] if len(created_at) > 16 else created_at
 
             expander_title = f"📅 {date_display}"
-            
+
             with st.expander(expander_title):
                 st.markdown(f"<div style='margin-bottom: 12px;'>{badges_html}</div>", unsafe_allow_html=True)
-                
+
                 # 오늘의 매수 내역 카드
                 safe_content = html.escape(content)
                 purchase_html = f"""
@@ -91,7 +92,7 @@ def render_records_tab(supabase):
                 """
                 st.markdown("**🛒 오늘의 매매 내역**")
                 st.markdown(purchase_html, unsafe_allow_html=True)
-                
+
                 # AI 피드백
                 st.markdown("**🧠 AI 멘토의 솔루션**")
                 # [수정 #2] AI 생성 HTML을 sanitize 처리하여 XSS 방어
@@ -101,3 +102,33 @@ def render_records_tab(supabase):
                 </div>
                 """
                 st.markdown(feedback_html, unsafe_allow_html=True)
+
+                # ── 삭제 버튼 ────────────────────────────────────
+                st.markdown("<div style='margin-top:16px; border-top:1px solid #F0F0F0; padding-top:12px;'></div>", unsafe_allow_html=True)
+
+                pending = st.session_state.get("pending_delete_id")
+
+                if pending == journal_id:
+                    # 삭제 확인 단계
+                    st.warning("⚠️ 이 일기를 삭제하면 **되돌릴 수 없어요.** 정말 삭제할까요?")
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        if st.button("🗑️ 네, 삭제할게요", key=f"confirm_del_{journal_id}", type="primary", use_container_width=True):
+                            try:
+                                delete_journal(journal_id, user_id, supabase)
+                                st.session_state.pop("pending_delete_id", None)
+                                st.toast("일기가 삭제됐어요.", icon="🗑️")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"삭제 실패: {e}")
+                    with col_cancel:
+                        if st.button("취소", key=f"cancel_del_{journal_id}", use_container_width=True):
+                            st.session_state.pop("pending_delete_id", None)
+                            st.rerun()
+                else:
+                    # 삭제 버튼 (우측 정렬)
+                    _, col_del = st.columns([6, 1])
+                    with col_del:
+                        if st.button("🗑️", key=f"del_btn_{journal_id}", help="이 일기 삭제", use_container_width=True):
+                            st.session_state["pending_delete_id"] = journal_id
+                            st.rerun()

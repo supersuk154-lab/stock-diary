@@ -12,6 +12,7 @@ __all__ = [
     "get_recent_journals",
     "get_real_inventory",
     "get_dividend_total",
+    "delete_journal",
 ]
 
 
@@ -208,6 +209,15 @@ def get_real_inventory(user_id: str, _supabase):
     except Exception as e:
         st.error(f"재고 데이터 집계 실패: {e}")
         return []
+
+
+def delete_journal(journal_id: str, user_id: str, supabase) -> None:
+    """일기를 삭제합니다. user_id를 함께 검증해 타인의 일기는 절대 삭제하지 않습니다."""
+    if not journal_id or not user_id:
+        raise ValueError("journal_id와 user_id는 필수입니다.")
+    supabase.table("journals").delete().eq("id", journal_id).eq("user_id", user_id).execute()
+    # 캐시 무효화
+    get_recent_journals.clear()
 
 
 @st.cache_data(ttl=30)
