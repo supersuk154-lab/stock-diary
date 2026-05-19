@@ -15,6 +15,7 @@ from ui_components import render_radar_chart
 from session_utils import (
     SESSION_CACHE_PATH, get_dev_mode,
     save_session_to_disk, load_session_from_disk, clear_session_from_disk,
+    clear_pin_cache,
 )
 from auth import show_login
 
@@ -380,7 +381,8 @@ if st.sidebar.button("🚪 로그아웃"):
         st.session_state['_logout_confirmed'] = True
         st.sidebar.warning("⚠️ 입력 중인 데이터가 있습니다! 다시 한번 로그아웃 버튼을 누르면 진행합니다.")
         st.stop()
-    clear_session_from_disk()  # [추가] 디스크 세션도 함께 삭제
+    clear_session_from_disk()
+    clear_pin_cache()
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
