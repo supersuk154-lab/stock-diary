@@ -5,10 +5,10 @@ from db import get_past_context
 from constants import (
     TAG_SALARY_BUY, TAG_DIVIDEND, TAG_PRAISE_PAST,
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK,
-    TAG_SHAKY, TAG_IMPULSE_TRADE, TAG_MISTAKE
+    TAG_SHAKY, TAG_IMPULSE_TRADE, TAG_MISTAKE, PRIMARY_MODEL_NAME
 )
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = PRIMARY_MODEL_NAME
 
 def render_chat_section(supabase, ai_client) -> list:
     """태그 선택 UI 및 AI 멘토와의 자유 대화 섹션을 렌더링하고, 선택된 태그 리스트를 반환합니다."""

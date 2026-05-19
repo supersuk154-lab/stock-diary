@@ -8,10 +8,10 @@ from db import get_real_inventory, get_past_context, get_recent_journals, has_ta
 from ui_components import sanitize_html
 from constants import (
     TAG_PRAISE_PAST, TAG_DIVIDEND, TAG_SHAKY, TAG_IMPULSE_TRADE,
-    TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE
+    TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE, PRIMARY_MODEL_NAME
 )
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = PRIMARY_MODEL_NAME
 
 def render_upload_section(supabase, ai_client, selected_tags):
     """이미지 업로드 -> 데이터 검증 -> 최종 분석 섹션 흐름을 관리 및 렌더링합니다."""
