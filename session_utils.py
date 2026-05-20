@@ -109,11 +109,14 @@ def save_pin_lockout(pin_data: dict, locked_until_iso: str) -> None:
 
 
 def load_pin_cache() -> dict | None:
-    """PIN 캐시 읽기. 브라우저 쿠키 우선, 없으면 파일, 둘 다 없으면 None."""
+    """PIN 캐시 읽기. 브라우저 쿠키 우선, 없으면 파일, 둘 다 없으면 None.
+    locked_until만 있는 쿠키(5회 실패 잠금 상태)도 반환해 잠금이 소실되지 않도록 한다."""
     # ① 브라우저 쿠키 (재배포 후에도 살아있음)
     cookie_data = _load_pin_from_cookie()
-    if cookie_data and cookie_data.get("pin_hash") and cookie_data.get("access_token"):
-        return cookie_data
+    if cookie_data and cookie_data.get("pin_hash"):
+        # 토큰이 있거나 잠금 상태인 경우 모두 유효한 캐시로 처리
+        if cookie_data.get("access_token") or cookie_data.get("locked_until"):
+            return cookie_data
     # ② 로컬 파일 폴백
     try:
         if PIN_CACHE_PATH.exists():
