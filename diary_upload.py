@@ -263,12 +263,17 @@ def _render_step_verify(supabase):
                 change = info["change"]
                 badge = "🔴 매도" if change < 0 else "🟢 매수"
                 st.markdown(
-                    f"**{stock}** &nbsp; {badge} &nbsp;"
-                    f"<span style='color:gray;font-size:0.85em;'>"
-                    f"{_fmt_qty(info['old'])}주 → {_fmt_qty(info['new'])}주</span>",
+                    f"{badge} &nbsp; <span style='color:gray;font-size:0.85em;'>"
+                    f"기존 잔고: {_fmt_qty(info['old'])}주 &nbsp;|&nbsp; 인식된 수량: {_fmt_qty(info['new'])}주</span>",
                     unsafe_allow_html=True
                 )
-                col_qty, col_memo = st.columns([1, 2])
+                col_name, col_qty, col_memo = st.columns([2.5, 1.8, 3.7])
+                with col_name:
+                    st.text_input(
+                        "종목명",
+                        value=stock,
+                        key=f"name_{stock}"
+                    )
                 with col_qty:
                     st.number_input(
                         "변동 수량 (+매수 / -매도)",
@@ -297,13 +302,16 @@ def _render_step_verify(supabase):
 
         if submit_btn and diff_data:
             for stock in diff_data:
+                final_name = st.session_state.get(f"name_{stock}", stock).strip()
+                if not final_name:
+                    final_name = stock
                 final_qty = st.session_state.get(f"qty_{stock}", 0)
                 memo      = st.session_state.get(f"memo_{stock}", "").strip()
                 if final_qty != 0:
                     action   = "매수" if final_qty > 0 else "매도"
                     memo_str = f" (사유: {memo})" if memo else ""
                     st.session_state['daily_stock_list'].append(
-                        f"{stock} {_fmt_qty(abs(final_qty))}주 {action}{memo_str}"
+                        f"{final_name} {_fmt_qty(abs(final_qty))}주 {action}{memo_str}"
                     )
             st.session_state['current_step'] = 'ask_next'
             st.rerun()
