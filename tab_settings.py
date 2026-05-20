@@ -41,8 +41,10 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
     st.markdown("#### 💾 데이터 내보내기 및 백업")
     st.markdown("<p style='color: #8B95A1; font-size: 0.88em; margin-bottom: 12px;'>사용자가 기록한 모든 주식 일기와 AI 피드백을 JSON 파일로 즉시 다운로드하여 소장할 수 있습니다.</p>", unsafe_allow_html=True)
 
+    _uid = st.session_state.get("user_id")
+    today_str = datetime.datetime.now(KST).strftime("%Y%m%d")
+
     try:
-        _uid = st.session_state.get("user_id")
         all_rows = (
             supabase.table("journals")
             .select("created_at, tags, content, ai_feedback")
@@ -61,7 +63,6 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
             } for r in all_rows]
 
             json_bytes = json.dumps(export_data, ensure_ascii=False, indent=2).encode("utf-8")
-            today_str = datetime.datetime.now(KST).strftime("%Y%m%d")
 
             st.download_button(
                 label=f"📥 내 일기 {len(all_rows)}개 백업 파일 다운로드 (.json)",
@@ -73,6 +74,43 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
             banner("아직 저장된 일기가 없어서 백업을 생성할 수 없습니다.", type="info")
     except Exception as e:
         banner(f"백업 데이터 조회 실패: {e}", type="error")
+
+    # 2.5. 앱 로그 내보내기
+    st.markdown("---")
+    st.markdown("#### 📜 앱 동작 로그 다운로드")
+    st.markdown("<p style='color: #8B95A1; font-size: 0.88em; margin-bottom: 12px;'>로그인, 데이터 저장, AI 상호작용 등 최근 동작 로그를 CSV 파일로 다운로드하여 확인할 수 있습니다.</p>", unsafe_allow_html=True)
+
+    try:
+        log_rows = (
+            supabase.table("app_logs")
+            .select("created_at, level, event, message, extra")
+            .eq("user_id", _uid)
+            .order("created_at", desc=True)
+            .limit(1000)  # 최근 1000개만 조회
+            .execute()
+            .data
+        )
+
+        if log_rows:
+            # Pandas DataFrame으로 변환 및 가공
+            df_logs = pd.DataFrame(log_rows)
+            df_logs["created_at_kst"] = df_logs["created_at"].apply(to_kst_str)
+            df_logs = df_logs[["created_at_kst", "level", "event", "message", "extra"]]
+            df_logs.columns = ["발생시각(KST)", "로그레벨", "이벤트", "메시지", "상세데이터"]
+
+            # Excel 한글 깨짐 방지를 위해 utf-8-sig 인코딩 적용
+            csv_data = df_logs.to_csv(index=False, encoding="utf-8-sig")
+
+            st.download_button(
+                label=f"📥 앱 동작 로그 {len(log_rows)}개 다운로드 (.csv)",
+                data=csv_data,
+                file_name=f"app_logs_{today_str}.csv",
+                mime="text/csv",
+            )
+        else:
+            banner("조회된 앱 로그가 아직 없습니다. 앱 활동이 기록되면 여기에 나타납니다.", type="info")
+    except Exception as e:
+        banner(f"로그 데이터 조회 실패: {e}", type="error")
 
     # 3. 티커 관리자
     st.markdown("---")
