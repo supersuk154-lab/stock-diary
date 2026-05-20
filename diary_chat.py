@@ -178,8 +178,7 @@ def render_chat_section(supabase, ai_client) -> list:
                 )
     
                 if err:
-                    st.error(err)
-                    response_text = "죄송해요, 잠시 답변을 만들지 못했어요. 잠시 후 다시 보내주세요."
+                    response_text = "죄송해요, AI 서버가 잠시 바쁜 것 같아요. 잠시 후 다시 보내주세요. 🙏"
     
                 st.session_state['chat_messages'].append(
                     {"role": "assistant", "content": response_text}

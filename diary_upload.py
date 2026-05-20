@@ -527,8 +527,13 @@ def _render_step_final(supabase, ai_client, selected_tags):
         )
 
     if 'final_error' in st.session_state:
-        st.error(st.session_state['final_error'])
-        st.info("위 오류가 일시적인 것 같으면 잠시 후 다시 시도해주세요. **입력하신 내역은 아직 저장되지 않았습니다.**")
+        _ferr = st.session_state['final_error']
+        _is_server_err = any(k in _ferr for k in ("503", "UNAVAILABLE", "서버", "응답하지 않습니다", "한도 초과", "429"))
+        if _is_server_err:
+            st.warning("⏳ AI 서버가 일시적으로 바빠서 처리하지 못했어요. 잠시 후 다시 시도해주세요.")
+        else:
+            st.error(_ferr)
+        st.info("입력하신 내역은 아직 저장되지 않았습니다. 다시 시도해 주세요.")
     elif 'final_result' in st.session_state:
         if show_balloons and not st.session_state.get('balloons_shown'):
             st.balloons()
