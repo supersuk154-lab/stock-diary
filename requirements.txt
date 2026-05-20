@@ -6,4 +6,5 @@ plotly>=5.18.0
 yfinance>=0.2.40
 openpyxl>=3.1.0
 bleach>=6.0.0
+tinycss2>=1.2.1
 pykrx>=1.0.45
