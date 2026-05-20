@@ -1,3 +1,4 @@
+import html as _html
 import plotly.graph_objects as go
 import streamlit as st
 import bleach
@@ -91,6 +92,8 @@ def banner(message: str, type: str = "info"):
         "error": ("#FFE3E3", "#E03131"),
     }
     bg, text = colors.get(type, colors["info"])
+    # 사용자 유래 문자열이 들어올 수 있으므로 이스케이프 후 줄바꿈만 <br>로 변환
+    safe_message = _html.escape(str(message)).replace("\n", "<br>")
     banner_html = f"""
     <div style="
         background-color: {bg};
@@ -104,7 +107,7 @@ def banner(message: str, type: str = "info"):
         font-family: Pretendard;
         line-height: 1.5;
     ">
-        {message}
+        {safe_message}
     </div>
     """
     st.markdown(banner_html, unsafe_allow_html=True)

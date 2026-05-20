@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+import html
 from prices import _market_time_bucket, resolve_ticker, get_realtime_prices_bulk, get_usd_to_krw
 from db import get_real_inventory, get_dividend_total
 from ui_components import banner
@@ -231,8 +232,8 @@ def render_family_contributions(portfolio: list, _supabase, user_id: str):
                 f'<div style="padding:12px 16px; margin-bottom:8px; background:#fff; '
                 f'border-radius:10px; border-left:4px solid {color}; '
                 f'box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
-                f'<div style="font-weight:700; color:#212529;">{name} '
-                f'<span style="font-size:0.83em; color:#888; font-weight:400;">({role})</span></div>'
+                f'<div style="font-weight:700; color:#212529;">{html.escape(name)} '
+                f'<span style="font-size:0.83em; color:#888; font-weight:400;">({html.escape(role)})</span></div>'
                 f'<div style="display:flex; justify-content:space-between; margin-top:5px; align-items:center;">'
                 f'<span style="font-size:0.82em; color:#666;">{comment}</span>'
                 f'<span style="font-weight:700; color:#2b8a3e; font-size:0.88em;">{amount_str}</span>'
@@ -362,7 +363,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                             background-color:#FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
                             border: 1px solid #F2F4F6;">
                     <div style="line-height:1.4; flex: 1; min-width: 0; padding-right: 16px;">
-                        <div style="font-weight:700; font-size:1.05em; color:#333D4B; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="{item['종목']}">{item['종목']}</div>
+                        <div style="font-weight:700; font-size:1.05em; color:#333D4B; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="{html.escape(item['종목'])}">{html.escape(item['종목'])}</div>
                         <div style="color:#8B95A1; font-size:0.85em; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">{_fmt_qty(item['수량'])}주 보유</div>
                     </div>
                     <div style="text-align:right; line-height:1.4; flex-shrink: 0;">

@@ -2,6 +2,7 @@ import json
 import os
 import base64
 import hashlib
+import secrets as _secrets
 import streamlit as st
 import streamlit.components.v1 as components
 from pathlib import Path
@@ -24,10 +25,16 @@ def get_dev_mode(secrets) -> bool:
 
 # ── PIN 관련 유틸 ──────────────────────────────────────────
 
-def hash_pin(pin: str) -> str:
-    """PIN을 레인보우 테이블 공격 방어용 PEPPER와 함께 SHA-256으로 해싱."""
+def generate_pin_salt() -> str:
+    """PIN 해시에 사용할 무작위 per-user salt 생성 (32자 hex)."""
+    return _secrets.token_hex(16)
+
+
+def hash_pin(pin: str, salt: str = "") -> str:
+    """PIN을 SHA-256으로 해싱. PEPPER + per-user salt 적용.
+    salt 없이 호출하면 기존 해시와 호환 (구버전 캐시 유지)."""
     PEPPER = "StockDiaryPacemaker2026!#@$"
-    return hashlib.sha256((pin + PEPPER).encode('utf-8')).hexdigest()
+    return hashlib.sha256((pin + PEPPER + salt).encode('utf-8')).hexdigest()
 
 
 def _cookie_js(value: str, max_age: int) -> str:
@@ -74,17 +81,31 @@ def _clear_pin_cookie() -> None:
         pass
 
 
-def save_pin_cache(session_dict: dict, pin_hash: str, email: str) -> None:
-    """PIN 해시 + 세션 토큰을 브라우저 쿠키(우선) + 파일(폴백)에 저장."""
-    data = {"pin_hash": pin_hash, "email": email, **session_dict}
+def save_pin_cache(
+    session_dict: dict,
+    pin_hash: str,
+    email: str,
+    pin_salt: str = "",
+    dev_mode: bool = False,
+) -> None:
+    """PIN 해시 + 세션 토큰을 브라우저 쿠키(우선) + 파일(폴백)에 저장.
+    파일 저장은 dev_mode 일 때만 — 프로덕션에서 토큰이 디스크에 남지 않도록."""
+    data = {"pin_hash": pin_hash, "pin_salt": pin_salt, "email": email, **session_dict}
     # ① 브라우저 쿠키 (재배포·재시작에도 유지됨)
     _save_pin_to_cookie(data)
-    # ② 로컬 파일 (개발 환경 폴백)
-    try:
-        PIN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PIN_CACHE_PATH.write_text(json.dumps(data), encoding="utf-8")
-    except Exception:
-        pass
+    # ② 로컬 파일 — 개발 환경 전용 (프로덕션에서는 비활성)
+    if dev_mode:
+        try:
+            PIN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            PIN_CACHE_PATH.write_text(json.dumps(data), encoding="utf-8")
+        except Exception:
+            pass
+
+
+def save_pin_lockout(pin_data: dict, locked_until_iso: str) -> None:
+    """PIN 연속 실패 잠금 상태를 쿠키에 덮어씀 (토큰·해시는 유지)."""
+    updated = {**pin_data, "locked_until": locked_until_iso}
+    _save_pin_to_cookie(updated)
 
 
 def load_pin_cache() -> dict | None:

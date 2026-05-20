@@ -1,17 +1,53 @@
+import re
 import streamlit as st
 import datetime
 from app_constants import KST
 
 
-def _is_admin(secrets) -> bool:
-    email = st.session_state.get("user_email", "")
+def _sanitize_report_html(html_content: str) -> str:
+    """리포트 HTML에서 XSS 벡터만 제거 (서식·스타일은 유지).
+    - <script> 블록 완전 제거
+    - on* 이벤트 핸들러 속성 제거 (onerror, onclick, onload 등)
+    - javascript: URL 제거
+    """
+    # <script>...</script> 블록 제거
+    html_content = re.sub(
+        r'<script\b[^>]*>.*?</script>',
+        '',
+        html_content,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # on* 이벤트 핸들러 속성 제거
+    html_content = re.sub(
+        r'\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]*)',
+        '',
+        html_content,
+        flags=re.IGNORECASE,
+    )
+    # javascript: URL 제거
+    html_content = re.sub(
+        r'(href|src)\s*=\s*["\']?\s*javascript\s*:',
+        r'\1="#"',
+        html_content,
+        flags=re.IGNORECASE,
+    )
+    return html_content
+
+
+def _is_admin(supabase, secrets) -> bool:
+    """관리자 여부를 Supabase JWT에서 직접 검증 (session_state 우회 방지)."""
+    try:
+        user_resp = supabase.auth.get_user()
+        email = user_resp.user.email if (user_resp and user_resp.user) else ""
+    except Exception:
+        return False
     if not email:
         return False
     admin_emails = secrets.get("ADMIN_EMAILS", None)
     if admin_emails is not None:
         return email in list(admin_emails)
     admin_email = secrets.get("ADMIN_EMAIL", "")
-    return email == admin_email
+    return bool(admin_email) and email == admin_email
 
 
 def _get_latest_report(supabase):
@@ -77,7 +113,7 @@ def _render_report_html(html_content: str, height: int = 1800):
 
 
 def render_report_tab(supabase, secrets):
-    is_admin = _is_admin(secrets)
+    is_admin = _is_admin(supabase, secrets)
 
     if is_admin:
         _render_admin_section(supabase)
@@ -108,7 +144,7 @@ def _render_admin_section(supabase):
                 try:
                     supabase.table("daily_reports").insert({
                         "title": title,
-                        "html_content": html_content,
+                        "html_content": _sanitize_report_html(html_content),
                         "uploaded_by": st.session_state.get("user_email", ""),
                     }).execute()
                     st.success(f"✅ 리포트 저장 완료: **{title}**")

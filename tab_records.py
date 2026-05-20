@@ -194,7 +194,7 @@ def render_records_tab(supabase):
             if tags_in_row:
                 for tag in tags_in_row.split(", "):
                     if tag:
-                        badges_html += f"<span style='background: #E8F4FF; color: #3182F6; padding: 3px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; margin-right: 6px;'>{tag}</span>"
+                        badges_html += f"<span style='background: #E8F4FF; color: #3182F6; padding: 3px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 600; margin-right: 6px;'>{html.escape(tag)}</span>"
             else:
                 badges_html = "<span style='color: #ADB5BD; font-size: 0.8em;'>태그 없음</span>"
 

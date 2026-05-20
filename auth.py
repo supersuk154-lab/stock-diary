@@ -1,8 +1,10 @@
 import streamlit as st
+import datetime
 from supabase import create_client
 from session_utils import (
     save_session_to_disk,
-    save_pin_cache, load_pin_cache, clear_pin_cache, hash_pin,
+    save_pin_cache, load_pin_cache, clear_pin_cache,
+    hash_pin, generate_pin_salt, save_pin_lockout,
 )
 
 MAX_PIN_ATTEMPTS = 5
@@ -68,8 +70,14 @@ def _restore_session_from_cache(
         st.session_state["supabase_session"] = session
         st.session_state["user_id"] = resp.user.id
         st.session_state["user_email"] = resp.user.email
-        # 갱신된 토큰을 PIN 캐시에 반영
-        save_pin_cache(session, pin_data["pin_hash"], pin_data.get("email", ""))
+        # 갱신된 토큰을 PIN 캐시에 반영 (솔트·잠금 상태 보존)
+        save_pin_cache(
+            session,
+            pin_data["pin_hash"],
+            pin_data.get("email", ""),
+            pin_data.get("pin_salt", ""),
+            dev_mode,
+        )
         save_session_to_disk(session, dev_mode)
         return True
     return False
@@ -81,6 +89,29 @@ def _show_pin_entry(
     pin_data: dict, supabase_url: str, supabase_anon_key: str, dev_mode: bool
 ):
     email = pin_data.get("email", "")
+
+    # ── 잠금 여부 확인 (쿠키 우선, session_state 폴백) ──────
+    locked_until_str = pin_data.get("locked_until") or st.session_state.get("_pin_locked_until")
+    if locked_until_str:
+        try:
+            locked_until = datetime.datetime.fromisoformat(locked_until_str)
+            if locked_until.tzinfo is None:
+                locked_until = locked_until.replace(tzinfo=datetime.timezone.utc)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if now < locked_until:
+                remaining_min = int((locked_until - now).total_seconds() / 60) + 1
+                st.error(f"🔒 PIN 5회 연속 오류로 **{remaining_min}분간** 잠겼습니다. 잠시 후 다시 시도해주세요.")
+                st.markdown("---")
+                if st.button("이메일로 로그인", use_container_width=True):
+                    st.session_state["_show_full_login"] = True
+                    st.rerun()
+                return
+            else:
+                # 잠금 만료 → 초기화
+                st.session_state.pop("_pin_locked_until", None)
+        except Exception:
+            pass
+
     attempts = st.session_state.get("_pin_attempts", 0)
 
     st.markdown(f"""
@@ -112,10 +143,11 @@ def _show_pin_entry(
     if submit:
         if len(pin) != 4 or not pin.isdigit():
             st.warning("숫자 4자리를 입력해주세요.")
-        elif hash_pin(pin) == pin_data.get("pin_hash"):
+        elif hash_pin(pin, pin_data.get("pin_salt", "")) == pin_data.get("pin_hash"):
             # ✅ PIN 일치 → 세션 복구
             if _restore_session_from_cache(pin_data, supabase_url, supabase_anon_key, dev_mode):
                 st.session_state.pop("_pin_attempts", None)
+                st.session_state.pop("_pin_locked_until", None)
                 st.rerun()
             else:
                 # 토큰 만료 → PIN 캐시 삭제 후 풀 로그인
@@ -129,9 +161,14 @@ def _show_pin_entry(
             new_attempts = attempts + 1
             st.session_state["_pin_attempts"] = new_attempts
             if new_attempts >= MAX_PIN_ATTEMPTS:
-                clear_pin_cache()
+                # 30분 잠금 — 쿠키에 저장해 새 탭에서도 유지
+                locked_until = (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    + datetime.timedelta(minutes=30)
+                ).isoformat()
+                save_pin_lockout(pin_data, locked_until)
+                st.session_state["_pin_locked_until"] = locked_until
                 st.session_state.pop("_pin_attempts", None)
-                st.session_state["_show_full_login"] = True
                 st.rerun()
             else:
                 st.rerun()
@@ -177,7 +214,8 @@ def _show_pin_setup(dev_mode: bool):
         elif pin1 != pin2:
             st.error("❌ PIN이 일치하지 않습니다.")
         else:
-            save_pin_cache(pending_session, hash_pin(pin1), pending_email)
+            salt = generate_pin_salt()
+            save_pin_cache(pending_session, hash_pin(pin1, salt), pending_email, salt, dev_mode)
             save_session_to_disk(pending_session, dev_mode)
             st.session_state["supabase_session"] = pending_session
             for k in ["_pending_session", "_pending_email", "_show_pin_setup"]:
@@ -225,8 +263,14 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
 
                     existing = load_pin_cache()
                     if existing and existing.get("pin_hash"):
-                        # 기존 PIN 유지 + 새 세션 토큰 업데이트
-                        save_pin_cache(session, existing["pin_hash"], user_email)
+                        # 기존 PIN·솔트 유지 + 새 세션 토큰 업데이트
+                        save_pin_cache(
+                            session,
+                            existing["pin_hash"],
+                            user_email,
+                            existing.get("pin_salt", ""),
+                            dev_mode,
+                        )
                         save_session_to_disk(session, dev_mode)
                         st.session_state["supabase_session"] = session
                         st.session_state.pop("_show_full_login", None)
