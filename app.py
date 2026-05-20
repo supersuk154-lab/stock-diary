@@ -35,69 +35,100 @@ from supabase import create_client, Client
 def setup_pwa_assets():
     """Streamlit 내부 static 폴더에 PWA 파일들을 복사하고 index.html을 패치하여 PWA 설치를 완벽 지원합니다."""
     import shutil
+    import re as _re
     from pathlib import Path
-    
+
     try:
-        # Streamlit 패키지의 static 폴더 경로 탐색
         st_static_dir = Path(st.__file__).parent / "static"
         if not st_static_dir.exists():
             return
-            
+
         local_static_dir = Path(__file__).parent / "static"
         if not local_static_dir.exists():
             return
-            
-        # 1. manifest.json 및 아이콘 파일 복사
-        files_to_copy = ["manifest.json", "icon_192.png", "icon_512.png"]
-        for fname in files_to_copy:
-            src = local_static_dir / fname
-            dst = st_static_dir / fname
-            if src.exists():
-                shutil.copy2(src, dst)
-                
-        # 2. sw.js (서비스 워커) 생성
-        sw_content = """// sw.js
-self.addEventListener('install', function(e) {
-  self.skipWaiting();
-});
-self.addEventListener('activate', function(e) {
-  return self.clients.claim();
-});
-self.addEventListener('fetch', function(e) {
-  // PWA 설치 요건을 충족하기 위한 빈 페치 핸들러
-});
+
+        # 1. manifest.json 복사 (Streamlit 기본 manifest 덮어쓰기)
+        manifest_src = local_static_dir / "manifest.json"
+        if manifest_src.exists():
+            shutil.copy2(manifest_src, st_static_dir / "manifest.json")
+
+        # 2. 아이콘 생성: icon.png → icon_192.png / icon_512.png (Pillow로 리사이즈)
+        icon_src = local_static_dir / "icon.png"
+        if icon_src.exists():
+            from PIL import Image as _Image
+            with _Image.open(icon_src) as _img:
+                for _size, _name in [(192, "icon_192.png"), (512, "icon_512.png")]:
+                    _dst = st_static_dir / _name
+                    _resized = _img.resize((_size, _size), _Image.LANCZOS)
+                    _resized.save(_dst, "PNG")
+
+        # 3. sw.js (서비스 워커) 생성
+        sw_content = """// sw.js — 최소 서비스 워커 (PWA 설치 요건 충족)
+self.addEventListener('install', function(e) { self.skipWaiting(); });
+self.addEventListener('activate', function(e) { return self.clients.claim(); });
+self.addEventListener('fetch', function(e) {});
 """
         with open(st_static_dir / "sw.js", "w", encoding="utf-8") as f:
             f.write(sw_content)
-            
-        # 3. index.html 패치 (manifest 연결 & 서비스 워커 등록 스크립트 삽입)
+
+        # 4. index.html 패치
         index_path = st_static_dir / "index.html"
-        if index_path.exists():
-            with open(index_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-                
-            # 중복 인젝션 방지
-            if "navigator.serviceWorker.register" not in html_content:
-                pwa_tags = """
-  <!-- PWA Settings -->
+        if not index_path.exists():
+            return
+
+        with open(index_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+
+        # 중복 패치 방지
+        if "navigator.serviceWorker.register" not in html_content:
+            # Streamlit 기본 manifest 링크 제거 → 우리 것이 유일하게 적용되도록
+            html_content = _re.sub(
+                r'<link[^>]+rel=["\']manifest["\'][^>]*/?>',
+                '',
+                html_content,
+                flags=_re.IGNORECASE,
+            )
+
+            pwa_patch = """
+  <!-- ▼ PWA 커스텀 설정 (주식메이트) ▼ -->
   <link rel="manifest" href="/manifest.json?v=3">
   <link rel="apple-touch-icon" href="/icon_192.png?v=3">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="주식메이트">
   <script>
+    // ① 서비스 워커 등록
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
         navigator.serviceWorker.register('/sw.js?v=3', { scope: '/' })
-          .then(function(reg) { console.log('PWA ServiceWorker registered successfully:', reg.scope); })
-          .catch(function(err) { console.error('PWA ServiceWorker registration failed:', err); });
+          .catch(function(e) { console.log('SW 등록 실패:', e); });
       });
     }
+    // ② PIN 입력창 숫자 키패드 활성화 (삼성 인터넷 포함)
+    //    components.html() iframe이 아닌 메인 문서에서 직접 실행하므로 크로스프레임 차단 없음
+    (function() {
+      function patchPinInputs() {
+        document.querySelectorAll('input[type="password"]').forEach(function(el) {
+          var ph = el.getAttribute('placeholder') || '';
+          if (ph.includes('4자리') || ph.includes('0000')) {
+            el.setAttribute('inputmode', 'numeric');
+            el.setAttribute('pattern', '[0-9]*');
+          }
+        });
+      }
+      document.addEventListener('DOMContentLoaded', function() {
+        new MutationObserver(patchPinInputs)
+          .observe(document.body, { childList: true, subtree: true });
+        patchPinInputs();
+      });
+    })();
   </script>
+  <!-- ▲ PWA 커스텀 설정 끝 ▲ -->
 </head>"""
-                html_content = html_content.replace("</head>", pwa_tags)
-                with open(index_path, "w", encoding="utf-8") as f:
-                    f.write(html_content)
+            html_content = html_content.replace("</head>", pwa_patch)
+            with open(index_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
     except Exception as e:
         import logging
         logging.warning(f"PWA 자산 자동 설정 실패: {e}")

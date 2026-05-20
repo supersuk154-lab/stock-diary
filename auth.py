@@ -10,28 +10,6 @@ from session_utils import (
 MAX_PIN_ATTEMPTS = 5
 
 
-def _enable_numeric_keyboard(placeholder_keyword: str):
-    """모바일 환경에서 password type input에 inputmode="numeric"과 pattern="[0-9]*" 속성을 주입하여 숫자 키패드를 띄움."""
-    import streamlit.components.v1 as components
-    components.html(
-        f"""
-        <script>
-        setTimeout(() => {{
-            const inputs = window.parent.document.querySelectorAll('input[type="password"]');
-            inputs.forEach(input => {{
-                const placeholder = input.getAttribute('placeholder') || '';
-                if (placeholder.includes('{placeholder_keyword}')) {{
-                    input.setAttribute('inputmode', 'numeric');
-                    input.setAttribute('pattern', '[0-9]*');
-                }}
-            }});
-        }}, 150);
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
 
 def validate_password(pw: str) -> str | None:
     """비밀번호 강도 검증. 문제 없으면 None 반환."""
@@ -162,7 +140,6 @@ def _show_pin_entry(
             label_visibility="collapsed",
         )
         submit = st.form_submit_button("확인", type="primary", use_container_width=True)
-    _enable_numeric_keyboard("숫자 4자리")
 
     if submit:
         if len(pin) != 4 or not pin.isdigit():
@@ -231,7 +208,6 @@ def _show_pin_setup(dev_mode: bool):
             save_btn = st.form_submit_button("PIN 설정", type="primary", use_container_width=True)
         with col2:
             skip_btn = st.form_submit_button("건너뛰기", use_container_width=True)
-    _enable_numeric_keyboard("0000")
 
     if save_btn:
         if len(pin1) != 4 or not pin1.isdigit():
