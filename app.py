@@ -19,6 +19,7 @@ from session_utils import (
     clear_pin_cache,
 )
 from auth import show_login
+from app_logger import init_logger, log_event
 
 # ==========================================
 from tab_diary import render_diary_tab
@@ -520,6 +521,10 @@ def get_supabase() -> Client:
 
 
 
+# [추가] 로그인 전에도 로거가 작동하도록 익명 클라이언트로 초기화
+_anon_supabase = _get_supabase_client()
+init_logger(_anon_supabase)
+
 # [추가] 로그인 안 되어 있으면 여기서 멈춤
 if not st.session_state.get("supabase_session"):
     show_login(SUPABASE_URL, SUPABASE_ANON_KEY, DEV_MODE)
@@ -527,6 +532,11 @@ if not st.session_state.get("supabase_session"):
 
 # [추가] 로그인 완료 후 사용할 Supabase 클라이언트
 supabase = get_supabase()
+
+# 세션 시작 로그 (페이지 첫 로드 1회)
+if not st.session_state.get("_session_logged"):
+    log_event("session_start", extra={"dev_mode": DEV_MODE})
+    st.session_state["_session_logged"] = True
 
 # PWA manifest JS 주입 (Streamlit Cloud 대응 — index.html 패치 불가 환경 폴백)
 _inject_pwa_js()
