@@ -18,14 +18,9 @@ def render_diary_tab(supabase, ai_client, dev_mode):
             except Exception:
                 pass
 
-    # ── 사이드바: 동굴 모드 + 멘토 선택 ──────────────────
-    zen_mode = st.sidebar.toggle(
-        "🦇 동굴 모드 켜기",
-        value=False,
-        help="시장이 폭락해 멘탈이 흔들릴 때 켜세요. 모든 수익률과 숫자를 가려줍니다.",
-    )
+    # ── 사이드바: 멘토 선택 ──────────────────
+    zen_mode = st.session_state.get("zen_mode", False)
 
-    st.sidebar.markdown("---")
     st.sidebar.markdown("**🤖 오늘의 멘토**")
 
     _mentor_options = [
@@ -112,6 +107,25 @@ def render_diary_tab(supabase, ai_client, dev_mode):
                                 f'</div>',
                                 unsafe_allow_html=True,
                             )
+    
+    # ── 동굴 모드 토글 (증시 날씨 자세히 보기 하단 배치) ─────────
+    with st.container(border=True):
+        col_text, col_toggle = st.columns([4, 1])
+        with col_text:
+            st.markdown(
+                "<span style='font-weight:700; font-size:0.95em; color:#333D4B;'>🦇 동굴 대피 모드</span><br>"
+                "<span style='font-size:0.8em; color:#8B95A1; line-height:1.3;'>시장이 폭락해 흔들릴 때 켜세요. 모든 자산 금액과 수익률을 숨겨줍니다.</span>",
+                unsafe_allow_html=True
+            )
+        with col_toggle:
+            zen_mode = st.toggle(
+                "동굴 모드",
+                value=st.session_state.get("zen_mode", False),
+                key="zen_mode",
+                label_visibility="collapsed"
+            )
+
+    st.markdown("<div style='margin:20px 0'></div>", unsafe_allow_html=True)
 
     # ── 1. 태그 선택 + AI 멘토 대화 ──────────────────────
     selected_tags = render_chat_section(supabase, ai_client)
