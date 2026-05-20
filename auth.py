@@ -6,6 +6,7 @@ from session_utils import (
     save_pin_cache, load_pin_cache, clear_pin_cache,
     hash_pin, generate_pin_salt, save_pin_lockout,
 )
+from app_logger import log_event
 
 MAX_PIN_ATTEMPTS = 5
 
@@ -149,6 +150,7 @@ def _show_pin_entry(
             if _restore_session_from_cache(pin_data, supabase_url, supabase_anon_key, dev_mode):
                 st.session_state.pop("_pin_attempts", None)
                 st.session_state.pop("_pin_locked_until", None)
+                log_event("login", "PIN 로그인 성공", extra={"method": "pin", "email": email})
                 st.rerun()
             else:
                 # 토큰 만료 → PIN 캐시 삭제 후 풀 로그인
@@ -170,8 +172,12 @@ def _show_pin_entry(
                 save_pin_lockout(pin_data, locked_until)
                 st.session_state["_pin_locked_until"] = locked_until
                 st.session_state.pop("_pin_attempts", None)
+                log_event("pin_lockout", "PIN 5회 실패 30분 잠금", level="WARNING",
+                          extra={"email": email, "locked_until": locked_until})
                 st.rerun()
             else:
+                log_event("pin_fail", f"PIN 실패 {new_attempts}회", level="WARNING",
+                          extra={"attempts": new_attempts, "email": email})
                 st.rerun()
 
     st.markdown("---")
@@ -263,6 +269,7 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
                     st.session_state["user_email"] = user_email
 
                     existing = load_pin_cache()
+                    log_event("login", "이메일 로그인 성공", extra={"method": "email", "email": user_email})
                     if existing and existing.get("pin_hash"):
                         # 기존 PIN·솔트 유지 + 새 세션 토큰 업데이트
                         save_pin_cache(
@@ -284,6 +291,8 @@ def _show_full_login_form(supabase_url: str, supabase_anon_key: str, dev_mode: b
                         st.session_state.pop("_show_full_login", None)
                         st.rerun()
             except Exception:
+                log_event("login_fail", "이메일 로그인 실패", level="WARNING",
+                          extra={"method": "email", "email": email})
                 st.error("⚠️ 로그인 실패: 이메일이나 비밀번호를 다시 확인해주세요.")
 
     st.markdown("---")

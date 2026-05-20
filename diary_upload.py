@@ -7,6 +7,7 @@ from ai_helper import safe_generate, ai_resolve_ticker
 from prices import _market_time_bucket, get_realtime_prices_bulk, resolve_ticker
 from db import get_real_inventory, get_past_context, get_recent_journals, has_tag
 from ui_components import sanitize_html
+from app_logger import log_event, timed_log
 from app_constants import (
     TAG_PRAISE_PAST, TAG_DIVIDEND, TAG_SHAKY, TAG_IMPULSE_TRADE,
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK, TAG_MISTAKE, PRIMARY_MODEL_NAME
@@ -414,13 +415,14 @@ def _render_step_final(supabase, ai_client, selected_tags):
             tag_text = " ".join(selected_tags) if selected_tags else ""
             final_prompt = f"태그: {tag_text}\n\n사용자가 오늘 다음 매수/매도 내역을 기록했습니다:\n{all_data_str}\n\n이 내역을 바탕으로 전체적인 투자 평과 멘탈 관리 조언을 해줘."
 
-            final_text, err = safe_generate(
-                client=ai_client,
-                model_name=MODEL_NAME,
-                contents=final_prompt,
-                config=config,
-                fallback_msg="최종 피드백 생성 중 오류가 발생했어요."
-            )
+            with timed_log("ai_analysis", extra={"mentor": chosen_mentor, "tag_count": len(selected_tags)}):
+                final_text, err = safe_generate(
+                    client=ai_client,
+                    model_name=MODEL_NAME,
+                    contents=final_prompt,
+                    config=config,
+                    fallback_msg="최종 피드백 생성 중 오류가 발생했어요."
+                )
 
             if err:
                 st.session_state['final_error'] = err
@@ -511,6 +513,10 @@ def _render_step_final(supabase, ai_client, selected_tags):
                                 t["user_id"] = _uid
                             supabase.table("trades").insert(trades_to_insert).execute()
                         get_real_inventory.clear()
+                        log_event("diary_save", "일기 저장 완료",
+                                  extra={"tags": tags_str,
+                                         "trade_count": len(trades_to_insert),
+                                         "journal_id": str(journal_id)})
 
                     except Exception as db_save_err:
                         # 보상 트랜잭션: 일기 저장 후 매매 내역 저장 실패 시 일기 삭제
@@ -519,6 +525,8 @@ def _render_step_final(supabase, ai_client, selected_tags):
                                 supabase.table("journals").delete().eq("id", journal_id).execute()
                             except Exception as rollback_err:
                                 st.error(f"보상 트랜잭션(롤백) 실패: {rollback_err}")
+                        log_event("diary_save_error", str(db_save_err)[:300], level="ERROR",
+                                  extra={"tags": tags_str})
                         st.session_state['final_error'] = f"데이터베이스 저장 실패: {db_save_err}"
                         raise db_save_err
 

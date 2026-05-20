@@ -4,6 +4,7 @@ import streamlit as st
 from google.genai import types
 from ai_helper import safe_generate
 from db import get_past_context
+from app_logger import log_event, timed_log
 from app_constants import (
     TAG_SALARY_BUY, TAG_DIVIDEND, TAG_PRAISE_PAST,
     TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK,
@@ -221,13 +222,14 @@ def render_chat_section(supabase, ai_client) -> list:
                     system_prompt += f"\n\n{past_ctx}"
 
                 config = types.GenerateContentConfig(system_instruction=system_prompt)
-                opening_text, err = safe_generate(
-                    client=ai_client,
-                    model_name=MODEL_NAME,
-                    contents="(일기 내용을 읽고 첫 인사를 해주세요)",
-                    config=config,
-                    fallback_msg="안녕하세요! 오늘 일기를 써주셨군요. 편하게 이야기해 주세요. 🙏",
-                )
+                with timed_log("ai_chat_opening", extra={"mentor": st.session_state.get("chosen_mentor", "")}):
+                    opening_text, err = safe_generate(
+                        client=ai_client,
+                        model_name=MODEL_NAME,
+                        contents="(일기 내용을 읽고 첫 인사를 해주세요)",
+                        config=config,
+                        fallback_msg="안녕하세요! 오늘 일기를 써주셨군요. 편하게 이야기해 주세요. 🙏",
+                    )
                 if err:
                     opening_text = "안녕하세요! 오늘 일기를 써주셨군요. 어떤 이야기든 편하게 들려주세요. 🙏"
 
@@ -298,13 +300,15 @@ def render_chat_section(supabase, ai_client) -> list:
                 system_prompt += f"\n\n{past_ctx}"
 
             config = types.GenerateContentConfig(system_instruction=system_prompt)
-            response_text, err = safe_generate(
-                client=ai_client,
-                model_name=MODEL_NAME,
-                contents=user_input.strip(),
-                config=config,
-                fallback_msg="답변 생성 중 오류가 발생했어요.",
-            )
+            with timed_log("ai_chat_reply", extra={"mentor": st.session_state.get("chosen_mentor", ""),
+                                                    "msg_count": len(st.session_state["chat_messages"])}):
+                response_text, err = safe_generate(
+                    client=ai_client,
+                    model_name=MODEL_NAME,
+                    contents=user_input.strip(),
+                    config=config,
+                    fallback_msg="답변 생성 중 오류가 발생했어요.",
+                )
             if err:
                 response_text = (
                     "죄송해요, AI 서버가 잠시 바쁜 것 같아요. 잠시 후 다시 보내주세요. 🙏"

@@ -477,7 +477,58 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
         """)
         st.caption("💡 Tip: 매일 사진을 올릴 필요는 없습니다. 매매가 없는 날엔 태그 하나와 짧은 생각만 남겨보세요.")
 
-    # 6. 계정 데이터 영구 삭제
+    # 6. 앱 로그 뷰어 (dev_mode 전용)
+    if dev_mode:
+        st.markdown("---")
+        st.markdown("#### 📊 앱 이벤트 로그 (관리자 전용)")
+        st.caption("app_logs 테이블의 최근 이벤트를 조회합니다.")
+
+        log_level_filter = st.selectbox(
+            "레벨 필터",
+            ["전체", "INFO", "WARNING", "ERROR"],
+            key="log_level_filter",
+        )
+        log_limit = st.slider("조회 건수", min_value=10, max_value=200, value=50, step=10, key="log_limit")
+
+        if st.button("🔄 로그 새로고침", key="refresh_logs_btn"):
+            st.rerun()
+
+        try:
+            q = supabase.table("app_logs").select("created_at, level, event, message, user_id, extra")
+            if log_level_filter != "전체":
+                q = q.eq("level", log_level_filter)
+            logs = q.order("created_at", desc=True).limit(log_limit).execute().data
+
+            if logs:
+                log_rows = []
+                for r in logs:
+                    log_rows.append({
+                        "시각": r.get("created_at", "")[:19].replace("T", " "),
+                        "레벨": r.get("level", ""),
+                        "이벤트": r.get("event", ""),
+                        "메시지": r.get("message", ""),
+                        "user_id": (r.get("user_id") or "")[:8],
+                        "extra": str(r.get("extra") or ""),
+                    })
+                st.dataframe(
+                    pd.DataFrame(log_rows),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "시각":    st.column_config.TextColumn(width="medium"),
+                        "레벨":    st.column_config.TextColumn(width="small"),
+                        "이벤트":  st.column_config.TextColumn(width="small"),
+                        "메시지":  st.column_config.TextColumn(width="large"),
+                        "user_id": st.column_config.TextColumn(width="small"),
+                        "extra":   st.column_config.TextColumn(width="large"),
+                    },
+                )
+            else:
+                banner("조건에 맞는 로그가 없습니다.", type="info")
+        except Exception as e:
+            banner(f"로그 조회 실패: {e}", type="error")
+
+    # 7. 계정 데이터 영구 삭제
     st.markdown("---")
     st.markdown("<h4 style='color: #E03131;'>⚠️ 계정 데이터 삭제</h4>", unsafe_allow_html=True)
     st.markdown("<p style='color: #8B95A1; font-size: 0.88em;'>이 작업은 복구가 불가능합니다. 신중히 결정해 주세요.</p>", unsafe_allow_html=True)
