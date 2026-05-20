@@ -41,26 +41,37 @@ def _restore_session_from_cache(
     pin_data: dict, supabase_url: str, supabase_anon_key: str, dev_mode: bool
 ) -> bool:
     """PIN 캐시의 토큰으로 Supabase 세션 복구. 성공 시 True."""
+    client = create_client(supabase_url, supabase_anon_key)
+
+    resp = None
+    # 1차 시도: set_session (access_token이 유효하면 즉시 복구)
     try:
-        client = create_client(supabase_url, supabase_anon_key)
         resp = client.auth.set_session(
             access_token=pin_data["access_token"],
             refresh_token=pin_data["refresh_token"],
         )
-        if resp and resp.session:
-            session = {
-                "access_token": resp.session.access_token,
-                "refresh_token": resp.session.refresh_token,
-            }
-            st.session_state["supabase_session"] = session
-            st.session_state["user_id"] = resp.user.id
-            st.session_state["user_email"] = resp.user.email
-            # 갱신된 토큰을 PIN 캐시에 반영
-            save_pin_cache(session, pin_data["pin_hash"], pin_data.get("email", ""))
-            save_session_to_disk(session, dev_mode)
-            return True
     except Exception:
         pass
+
+    # 2차 시도: refresh_session (access_token 만료 시 refresh_token으로 재발급)
+    if not (resp and resp.session):
+        try:
+            resp = client.auth.refresh_session(pin_data["refresh_token"])
+        except Exception:
+            pass
+
+    if resp and resp.session:
+        session = {
+            "access_token": resp.session.access_token,
+            "refresh_token": resp.session.refresh_token,
+        }
+        st.session_state["supabase_session"] = session
+        st.session_state["user_id"] = resp.user.id
+        st.session_state["user_email"] = resp.user.email
+        # 갱신된 토큰을 PIN 캐시에 반영
+        save_pin_cache(session, pin_data["pin_hash"], pin_data.get("email", ""))
+        save_session_to_disk(session, dev_mode)
+        return True
     return False
 
 
