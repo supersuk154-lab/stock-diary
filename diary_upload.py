@@ -121,7 +121,7 @@ def _render_step_upload(supabase, ai_client):
                 placeholder="예: 월급날 정기매수, 급락 추가 매수",
                 key="buy_memo_input",
             )
-            buy_submitted = st.form_submit_button("매수 추가", type="primary", use_container_width=True)
+            buy_submitted = st.form_submit_button("매수 추가", type="primary", width='stretch')
 
         if buy_submitted:
             if not buy_stock or not buy_stock.strip():
@@ -177,7 +177,7 @@ def _render_step_upload(supabase, ai_client):
                     placeholder="예: 목표가 달성, 리밸런싱",
                     key="sell_memo_input",
                 )
-                sell_submitted = st.form_submit_button("매도 추가", type="primary", use_container_width=True)
+                sell_submitted = st.form_submit_button("매도 추가", type="primary", width='stretch')
 
             if sell_submitted:
                 memo_str = f" (사유: {sell_memo.strip()})" if sell_memo and sell_memo.strip() else ""
@@ -309,14 +309,14 @@ def _render_step_ask_next():
             with col_text:
                 st.write(f"- {item}")
             with col_del:
-                if st.button("삭제", key=f"del_{i}", use_container_width=True):
+                if st.button("삭제", key=f"del_{i}", width='stretch'):
                     st.session_state['daily_stock_list'].pop(i)
                     st.rerun()
 
-    if st.button("분석 시작하기", type="primary", use_container_width=True):
+    if st.button("분석 시작하기", type="primary", width='stretch'):
         st.session_state['current_step'] = 'final_analysis'
         st.rerun()
-    if st.button("추가 입력하기", use_container_width=True):
+    if st.button("추가 입력하기", width='stretch'):
         st.session_state['uploader_key'] += 1
         st.session_state['current_step'] = 'upload_mode'
         st.rerun()

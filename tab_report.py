@@ -107,9 +107,8 @@ def _format_kst(iso_ts: str) -> str:
         return iso_ts
 
 
-import streamlit.components.v1 as components
 def _render_report_html(html_content: str, height: int = 1800):
-    components.html(html_content, height=height, scrolling=True)
+    st.iframe(srcdoc=html_content, height=height, scrolling=True)
 
 
 def render_report_tab(supabase, secrets):

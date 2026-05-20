@@ -2,6 +2,7 @@ import html as _html
 import plotly.graph_objects as go
 import streamlit as st
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
 
 
 # AI 생성 HTML에서 허용할 태그/속성 화이트리스트 (XSS 방어)
@@ -14,6 +15,14 @@ _ALLOWED_ATTRIBUTES = {
     "div": ["style"],
     "p": ["style"],
 }
+# style 속성 허용 시 CSS도 화이트리스트로 정화 (NoCssSanitizerWarning 해소)
+_CSS_SANITIZER = CSSSanitizer(allowed_css_properties=[
+    "color", "background-color", "background", "font-size", "font-weight",
+    "font-style", "text-align", "text-decoration", "margin", "margin-top",
+    "margin-bottom", "margin-left", "margin-right", "padding", "padding-top",
+    "padding-bottom", "padding-left", "padding-right", "border", "border-radius",
+    "line-height", "display", "opacity", "width", "max-width",
+])
 
 
 def sanitize_html(html_str: str) -> str:
@@ -24,6 +33,7 @@ def sanitize_html(html_str: str) -> str:
         html_str,
         tags=_ALLOWED_TAGS,
         attributes=_ALLOWED_ATTRIBUTES,
+        css_sanitizer=_CSS_SANITIZER,
         strip=True,
     )
 

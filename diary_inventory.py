@@ -273,7 +273,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
         st.markdown("### 📦 나의 보물함 (실시간)")
     with col_refresh:
         # Toss 스타일의 가볍고 조그만 새로고침 버튼 배치
-        if st.button("🔄 시세 새로고침", use_container_width=True, key="inventory_refresh_btn"):
+        if st.button("🔄 시세 새로고침", width='stretch', key="inventory_refresh_btn"):
             get_realtime_prices_bulk.clear()
             get_usd_to_krw.clear()
             get_real_inventory.clear()
@@ -537,7 +537,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                     with col_b:
                         _dd_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
                     _dd_submit = st.form_submit_button(
-                        "배당금 기록 저장", type="primary", use_container_width=True
+                        "배당금 기록 저장", type="primary", width='stretch'
                     )
 
                 if _dd_submit:
@@ -572,9 +572,9 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                         _m_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
                     col_s, col_c = st.columns(2)
                     with col_s:
-                        _m_submit = st.form_submit_button("저장", type="primary", use_container_width=True)
+                        _m_submit = st.form_submit_button("저장", type="primary", width='stretch')
                     with col_c:
-                        _m_cancel = st.form_submit_button("다시 입력", use_container_width=True)
+                        _m_cancel = st.form_submit_button("다시 입력", width='stretch')
 
                 if _m_submit:
                     if _m_amount > 0:
@@ -604,11 +604,11 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                     )
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("맞아요, 이 이름으로 저장", use_container_width=True, type="primary"):
+                        if st.button("맞아요, 이 이름으로 저장", width='stretch', type="primary"):
                             st.session_state["_div_confirmed_name"] = _ai_result["name"]
                             st.rerun()
                     with col2:
-                        if st.button("다시 입력", use_container_width=True, key="_div_retry_btn"):
+                        if st.button("다시 입력", width='stretch', key="_div_retry_btn"):
                             st.session_state.pop("_div_ai_result", None)
                             st.rerun()
                 else:
@@ -617,7 +617,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                         f"_{_ai_result.get('reason', '')}_\n\n"
                         "정식 종목명으로 다시 입력해주세요."
                     )
-                    if st.button("다시 입력", use_container_width=True, key="_div_retry_fail_btn"):
+                    if st.button("다시 입력", width='stretch', key="_div_retry_fail_btn"):
                         st.session_state.pop("_div_ai_result", None)
                         st.rerun()
 
@@ -629,7 +629,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                     key="_div_raw_text",
                 )
                 if ai_client:
-                    if st.button("AI 종목명 확인하기", use_container_width=True):
+                    if st.button("AI 종목명 확인하기", width='stretch'):
                         _raw = st.session_state.get("_div_raw_text", "").strip()
                         if not _raw:
                             st.warning("종목명을 먼저 입력해주세요.")
@@ -647,7 +647,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                         with col_b3:
                             _d_currency = st.radio("통화", ["KRW", "USD"], horizontal=True)
                         _d_submit = st.form_submit_button(
-                            "그대로 저장", type="primary", use_container_width=True
+                            "그대로 저장", type="primary", width='stretch'
                         )
                     if _d_submit:
                         _raw_name = st.session_state.get("_div_raw_text", "").strip()

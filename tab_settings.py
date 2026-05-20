@@ -293,7 +293,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
             auto_btn = st.button(
                 "야후파이낸스 기준 자동 매칭",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 help="미연결 종목의 티커를 KRX 데이터베이스와 야후파이낸스 규칙으로 자동으로 찾아 저장합니다.",
             )
         with col_dl:
@@ -310,7 +310,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
                     data=_csv_buf.getvalue().encode("utf-8-sig"),
                     file_name="ticker_list.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width='stretch',
                     help="종목명·티커 목록을 CSV로 받아 엑셀에서 편집한 뒤 아래 업로드 버튼으로 올리세요.",
                 )
         with col_info:
@@ -413,7 +413,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
                 "상태":      st.column_config.TextColumn("현재 상태",       disabled=True, width="small"),
                 "보유 수량": st.column_config.NumberColumn("보유 수량",     disabled=True, width="small"),
             },
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             key="ticker_editor",
         )

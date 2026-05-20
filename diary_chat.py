@@ -102,7 +102,7 @@ def render_chat_section(supabase, ai_client) -> list:
             next_clicked = st.form_submit_button(
                 "다음 → 태그 & AI 멘토와 대화",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
             )
 
         if next_clicked:
@@ -135,14 +135,14 @@ def render_chat_section(supabase, ai_client) -> list:
 
     col_edit, col_new = st.columns(2)
     with col_edit:
-        if st.button("✏️ 일기 수정", use_container_width=True, key="edit_diary_btn"):
+        if st.button("✏️ 일기 수정", width='stretch', key="edit_diary_btn"):
             st.session_state["diary_step"] = "write"
             # 기존 텍스트 복원 (수정 시 다시 편집 가능)
             st.session_state["diary_text_input"] = diary_text
             st.session_state["chat_messages"] = []
             st.rerun()
     with col_new:
-        if st.button("🆕 새 일기 작성", use_container_width=True, key="new_diary_btn"):
+        if st.button("🆕 새 일기 작성", width='stretch', key="new_diary_btn"):
             st.session_state["diary_step"] = "write"
             st.session_state["diary_initial_text"] = ""
             st.session_state["diary_text_input"] = ""
@@ -256,10 +256,10 @@ def render_chat_section(supabase, ai_client) -> list:
         col_send, col_clear = st.columns([7, 3])
         with col_send:
             send_clicked = st.form_submit_button(
-                "보내기", type="primary", use_container_width=True
+                "보내기", type="primary", width='stretch'
             )
         with col_clear:
-            clear_clicked = st.form_submit_button("대화 초기화", use_container_width=True)
+            clear_clicked = st.form_submit_button("대화 초기화", width='stretch')
 
     if clear_clicked:
         st.session_state["chat_messages"] = []

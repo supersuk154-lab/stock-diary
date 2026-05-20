@@ -136,7 +136,7 @@ def setup_pwa_assets():
 def _inject_pwa_js():
     """Streamlit Cloud 환경 대응: components.html()로 manifest 링크 동적 주입.
     Chrome 등 대부분 브라우저에서 동작 (삼성 인터넷은 크로스프레임 제한으로 부분 동작)."""
-    components.html("""
+    st.iframe(srcdoc="""
 <script>
 (function() {
   var MANIFEST = '/app/static/manifest.json?v=4';
