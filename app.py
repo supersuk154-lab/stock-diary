@@ -16,7 +16,7 @@ from session_utils import (
     save_session_to_disk, load_session_from_disk, clear_session_from_disk,
     clear_pin_cache,
 )
-from auth import show_login
+from auth import show_login, _extract_session_and_user
 from app_logger import init_logger, log_event
 
 # ==========================================
@@ -494,16 +494,17 @@ if DEV_MODE and "supabase_session" not in st.session_state:
                 access_token=cached["access_token"],
                 refresh_token=cached["refresh_token"],
             )
-            if _resp and _resp.session:
+            session_obj, user_obj = _extract_session_and_user(_temp_client, _resp)
+            if session_obj and user_obj:
                 # 토큰이 만료 직전이면 set_session이 자동 갱신해서 새 토큰을 줌
                 st.session_state["supabase_session"] = {
-                    "access_token": _resp.session.access_token,
-                    "refresh_token": _resp.session.refresh_token,
+                    "access_token": session_obj.access_token,
+                    "refresh_token": session_obj.refresh_token,
                 }
                 # pyrefly: ignore [missing-attribute]
-                st.session_state["user_id"] = _resp.user.id
+                st.session_state["user_id"] = user_obj.id
                 # pyrefly: ignore [missing-attribute]
-                st.session_state["user_email"] = _resp.user.email
+                st.session_state["user_email"] = user_obj.email
                 # 갱신된 토큰을 다시 저장
                 save_session_to_disk(st.session_state["supabase_session"], DEV_MODE)
         except Exception:
@@ -529,10 +530,35 @@ def get_supabase() -> Client:
     session = st.session_state.get("supabase_session")
     if session:
         try:
-            client.auth.set_session(
+            resp = client.auth.set_session(
                 access_token=session["access_token"],
                 refresh_token=session["refresh_token"],
             )
+            
+            # 토큰 자동 갱신 감지 및 저장소 업데이트
+            session_obj, _ = _extract_session_and_user(client, resp)
+            if session_obj:
+                if (session_obj.access_token != session["access_token"] or
+                    session_obj.refresh_token != session["refresh_token"]):
+                    new_session = {
+                        "access_token": session_obj.access_token,
+                        "refresh_token": session_obj.refresh_token,
+                    }
+                    st.session_state["supabase_session"] = new_session
+                    
+                    # 디스크 및 PIN 캐시도 즉시 갱신
+                    from session_utils import save_session_to_disk, save_pin_cache, load_pin_cache
+                    save_session_to_disk(new_session, DEV_MODE)
+                    
+                    pin_data = load_pin_cache()
+                    if pin_data and pin_data.get("pin_hash"):
+                        save_pin_cache(
+                            new_session,
+                            pin_data["pin_hash"],
+                            pin_data.get("email", ""),
+                            pin_data.get("pin_salt", ""),
+                            DEV_MODE,
+                        )
         except Exception:
             # 세션 만료 시 자동 로그아웃
             st.session_state.pop("supabase_session", None)

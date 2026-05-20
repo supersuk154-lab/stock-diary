@@ -41,6 +41,52 @@ def _show_header():
     """, unsafe_allow_html=True)
 
 
+def _extract_session_and_user(client, resp):
+    """Supabase AuthResponse 또는 Session 객체에서 안전하게 session과 user 객체 추출.
+    클라이언트 내부 상태(current_session 등)도 함께 체크하여 다양한 SDK 버전에 대응합니다.
+    """
+    session_obj = None
+    user_obj = None
+
+    if resp:
+        # AuthResponse 타입인 경우 (.session 속성 있음)
+        if hasattr(resp, "session") and resp.session:
+            session_obj = resp.session
+            if hasattr(resp, "user") and resp.user:
+                user_obj = resp.user
+        # Session 타입인 경우 (.access_token 속성이 직접 있음)
+        elif hasattr(resp, "access_token") and resp.access_token:
+            session_obj = resp
+            if hasattr(resp, "user") and resp.user:
+                user_obj = resp.user
+
+    # 클라이언트 내부 상태 체크 (세션 설정 성공 시 세션 객체가 동기화되어 있을 수 있음)
+    if not session_obj:
+        if hasattr(client.auth, "current_session") and client.auth.current_session:
+            session_obj = client.auth.current_session
+        elif hasattr(client.auth, "get_session"):
+            try:
+                session_obj = client.auth.get_session()
+            except Exception:
+                pass
+
+    if session_obj:
+        if not user_obj and hasattr(session_obj, "user") and session_obj.user:
+            user_obj = session_obj.user
+        
+        if not user_obj and hasattr(client.auth, "get_user"):
+            try:
+                u_resp = client.auth.get_user()
+                if hasattr(u_resp, "user") and u_resp.user:
+                    user_obj = u_resp.user
+                else:
+                    user_obj = u_resp
+            except Exception:
+                pass
+
+    return session_obj, user_obj
+
+
 def _restore_session_from_cache(
     pin_data: dict, supabase_url: str, supabase_anon_key: str, dev_mode: bool
 ) -> bool:
@@ -57,21 +103,24 @@ def _restore_session_from_cache(
     except Exception:
         pass
 
+    session_obj, user_obj = _extract_session_and_user(client, resp)
+
     # 2차 시도: refresh_session (access_token 만료 시 refresh_token으로 재발급)
-    if not (resp and resp.session):
+    if not session_obj:
         try:
             resp = client.auth.refresh_session(pin_data["refresh_token"])
+            session_obj, user_obj = _extract_session_and_user(client, resp)
         except Exception:
             pass
 
-    if resp and resp.session:
+    if session_obj and user_obj:
         session = {
-            "access_token": resp.session.access_token,
-            "refresh_token": resp.session.refresh_token,
+            "access_token": session_obj.access_token,
+            "refresh_token": session_obj.refresh_token,
         }
         st.session_state["supabase_session"] = session
-        st.session_state["user_id"] = resp.user.id
-        st.session_state["user_email"] = resp.user.email
+        st.session_state["user_id"] = user_obj.id
+        st.session_state["user_email"] = user_obj.email
         # 갱신된 토큰을 PIN 캐시에 반영 (솔트·잠금 상태 보존)
         save_pin_cache(
             session,

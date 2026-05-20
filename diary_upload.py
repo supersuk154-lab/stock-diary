@@ -212,11 +212,18 @@ def _render_step_verify(supabase):
         extracted_dict = {}
         _parse_error = True
 
+    if _parse_error:
+        st.warning("AI 응답을 해석하지 못했습니다. 다시 업로드하거나 직접 입력해주세요.")
+        if st.button("취소 및 다시 올리기", key="cancel_error_btn"):
+            st.session_state.pop('temp_extracted_data', None)
+            st.session_state.pop('processed_image', None)
+            st.session_state['uploader_key'] += 1
+            st.session_state['current_step'] = 'upload_mode'
+            st.rerun()
+        return
+
+    # DB 잔고 불러오기 및 매칭 맵 구축
     inventory = get_real_inventory(st.session_state["user_id"], supabase)
-    
-    # 대표 티커 혹은 정규화된 종목명으로 매칭 맵 구축
-    # key: ticker가 있으면 ticker, 없으면 정규화된 종목명
-    # value: 수량
     inventory_match_map = {}
     for item in inventory:
         item_ticker = item.get("ticker")
@@ -224,64 +231,105 @@ def _render_step_verify(supabase):
         match_key = item_ticker if item_ticker else norm_name
         inventory_match_map[match_key] = float(item["수량"])
 
-    diff_data = {}
-    if not _parse_error:
-        for stock, new_qty in extracted_dict.items():
-            # 업로드 이미지에서 파싱한 종목명도 동일한 규칙으로 매칭 키 생성
-            stock_norm = " ".join(stock.split())
-            stock_ticker = resolve_ticker(stock_norm)
-            match_key = stock_ticker if stock_ticker else stock_norm
-            
-            old_qty = inventory_match_map.get(match_key, 0.0)
-            change  = new_qty - old_qty
-            if change != 0:
-                diff_data[stock] = {"change": change, "old": old_qty, "new": new_qty}
+    # 1단계: 인식된 종목 및 수량 편집/확정
+    if 'verified_parsed_data' not in st.session_state:
+        st.markdown("#### 1단계. 인식된 종목 및 수량 확인")
+        st.info("💡 AI가 사진에서 분석한 종목과 최종 보유 수량입니다. 틀린 부분이 있으면 직접 수정한 후 아래 버튼을 눌러주세요.")
 
-    if _parse_error:
-        st.warning("AI 응답을 해석하지 못했습니다. 다시 업로드하거나 직접 입력해주세요.")
-    elif not diff_data:
-        st.success("🎉 DB 잔고와 동일합니다. 새로 변동된 내역이 없습니다.")
-        col_diary, col_cancel = st.columns([7, 3])
-        with col_diary:
-            if st.button("📝 매매 없이 감정 일기만 저장하기", key="diary_only_btn", type="primary"):
-                st.session_state['current_step'] = 'final_analysis'
-                st.rerun()
-        with col_cancel:
-            if st.button("취소 및 다시 올리기", key="cancel_only_btn"):
-                st.session_state.pop('temp_extracted_data', None)
-                st.session_state.pop('processed_image', None)
-                st.session_state['uploader_key'] += 1
-                st.session_state['current_step'] = 'upload_mode'
-                st.rerun()
-        return
+        with st.form(key='verify_parsed_form'):
+            for idx, (stock, qty) in enumerate(extracted_dict.items()):
+                stock_norm = " ".join(stock.split())
+                stock_ticker = resolve_ticker(stock_norm)
+                match_key = stock_ticker if stock_ticker else stock_norm
+                old_qty = inventory_match_map.get(match_key, 0.0)
+
+                col_name, col_qty = st.columns([6, 4])
+                with col_name:
+                    st.text_input(
+                        f"종목명 {idx+1} (기존 잔고: {_fmt_qty(old_qty)}주)",
+                        value=stock,
+                        key=f"parsed_name_{idx}"
+                    )
+                with col_qty:
+                    st.number_input(
+                        f"최종 수량 {idx+1}",
+                        value=float(qty),
+                        key=f"parsed_qty_{idx}",
+                        min_value=0.0,
+                        step=0.0001,
+                        format="%.4g",
+                    )
+                st.markdown("<hr style='margin:4px 0; border-color:#f0f0f0;'>", unsafe_allow_html=True)
+
+            col_save, col_cancel = st.columns([7, 3])
+            with col_save:
+                submit_parsed = st.form_submit_button("인식 결과 확정 및 잔고 비교", type="primary")
+            with col_cancel:
+                cancel_parsed = st.form_submit_button("취소 및 다시 올리기")
+
+        if submit_parsed:
+            verified_dict = {}
+            for idx in range(len(extracted_dict)):
+                name = st.session_state.get(f"parsed_name_{idx}", "").strip()
+                qty = st.session_state.get(f"parsed_qty_{idx}", 0.0)
+                if name and qty >= 0:
+                    verified_dict[name] = qty
+
+            diff_data = {}
+            for stock, new_qty in verified_dict.items():
+                stock_norm = " ".join(stock.split())
+                stock_ticker = resolve_ticker(stock_norm)
+                match_key = stock_ticker if stock_ticker else stock_norm
+
+                old_qty = inventory_match_map.get(match_key, 0.0)
+                change = new_qty - old_qty
+                if change != 0:
+                    diff_data[stock] = {"change": change, "old": old_qty, "new": new_qty}
+
+            st.session_state['verified_parsed_data'] = verified_dict
+            st.session_state['diff_data'] = diff_data
+            st.rerun()
+
+        elif cancel_parsed:
+            st.session_state.pop('temp_extracted_data', None)
+            st.session_state.pop('processed_image', None)
+            st.session_state['uploader_key'] += 1
+            st.session_state['current_step'] = 'upload_mode'
+            st.rerun()
+
+    # 2단계: 변동 내역 확인 및 사유 입력
     else:
-        st.info(f"DB 잔고와 비교해 **{len(diff_data)}개 종목**에 변동이 감지됐습니다. 수량을 확인하고 매매 사유를 적어주세요.")
+        st.markdown("#### 2단계. 변동 내역 확인 및 사유 입력")
+        diff_data = st.session_state.get('diff_data', {})
 
-    with st.form(key='verify_diff_form'):
-        if diff_data:
+        if not diff_data:
+            st.success("🎉 DB 잔고와 동일합니다. 새로 변동된 내역이 없습니다.")
+            col_diary, col_prev = st.columns([7, 3])
+            with col_diary:
+                if st.button("📝 매매 없이 감정 일기만 저장하기", key="diary_only_btn", type="primary"):
+                    st.session_state.pop('verified_parsed_data', None)
+                    st.session_state.pop('diff_data', None)
+                    st.session_state['current_step'] = 'final_analysis'
+                    st.rerun()
+            with col_prev:
+                if st.button("수정 단계로 돌아가기", key="prev_step_btn"):
+                    st.session_state.pop('verified_parsed_data', None)
+                    st.session_state.pop('diff_data', None)
+                    st.rerun()
+            return
+        else:
+            st.info(f"DB 잔고와 비교해 **{len(diff_data)}개 종목**에 변동이 감지됐습니다. 매매 사유를 적어주세요.")
+
+        with st.form(key='verify_diff_form'):
             for stock, info in diff_data.items():
                 change = info["change"]
                 badge = "🔴 매도" if change < 0 else "🟢 매수"
                 st.markdown(
-                    f"{badge} &nbsp; <span style='color:gray;font-size:0.85em;'>"
-                    f"기존 잔고: {_fmt_qty(info['old'])}주 &nbsp;|&nbsp; 인식된 수량: {_fmt_qty(info['new'])}주</span>",
+                    f"{badge} &nbsp; <b>{stock}</b> &nbsp; <span style='color:gray;font-size:0.85em;'>"
+                    f"기존 잔고: {_fmt_qty(info['old'])}주 &nbsp;|&nbsp; 최종 수량: {_fmt_qty(info['new'])}주 &nbsp;|&nbsp; 변동: {_fmt_qty(change)}주</span>",
                     unsafe_allow_html=True
                 )
-                col_name, col_qty, col_memo = st.columns([2.5, 1.8, 3.7])
-                with col_name:
-                    st.text_input(
-                        "종목명",
-                        value=stock,
-                        key=f"name_{stock}"
-                    )
-                with col_qty:
-                    st.number_input(
-                        "변동 수량 (+매수 / -매도)",
-                        value=float(change),
-                        key=f"qty_{stock}",
-                        step=0.0001,
-                        format="%.4g",
-                    )
+                col_memo = st.columns(1)[0]
                 with col_memo:
                     st.text_input(
                         "매매 사유 (선택)",
@@ -290,37 +338,30 @@ def _render_step_verify(supabase):
                     )
                 st.markdown("<hr style='margin:6px 0; border-color:#eee;'>", unsafe_allow_html=True)
 
-        col_save, col_cancel = st.columns([7, 3])
-        with col_save:
-            submit_btn = st.form_submit_button(
-                "확정 및 장바구니 담기",
-                type="primary",
-                disabled=not diff_data
-            )
-        with col_cancel:
-            cancel_btn = st.form_submit_button("취소 및 다시 올리기")
+            col_save, col_prev = st.columns([7, 3])
+            with col_save:
+                submit_btn = st.form_submit_button("확정 및 장바구니 담기", type="primary")
+            with col_prev:
+                prev_btn = st.form_submit_button("수정 단계로 돌아가기")
 
         if submit_btn and diff_data:
-            for stock in diff_data:
-                final_name = st.session_state.get(f"name_{stock}", stock).strip()
-                if not final_name:
-                    final_name = stock
-                final_qty = st.session_state.get(f"qty_{stock}", 0)
-                memo      = st.session_state.get(f"memo_{stock}", "").strip()
+            for stock, info in diff_data.items():
+                final_qty = info["change"]
+                memo = st.session_state.get(f"memo_{stock}", "").strip()
                 if final_qty != 0:
-                    action   = "매수" if final_qty > 0 else "매도"
+                    action = "매수" if final_qty > 0 else "매도"
                     memo_str = f" (사유: {memo})" if memo else ""
                     st.session_state['daily_stock_list'].append(
-                        f"{final_name} {_fmt_qty(abs(final_qty))}주 {action}{memo_str}"
+                        f"{stock} {_fmt_qty(abs(final_qty))}주 {action}{memo_str}"
                     )
+            st.session_state.pop('verified_parsed_data', None)
+            st.session_state.pop('diff_data', None)
             st.session_state['current_step'] = 'ask_next'
             st.rerun()
 
-        elif cancel_btn:
-            st.session_state.pop('temp_extracted_data', None)
-            st.session_state.pop('processed_image', None)
-            st.session_state['uploader_key'] += 1
-            st.session_state['current_step'] = 'upload_mode'
+        elif prev_btn:
+            st.session_state.pop('verified_parsed_data', None)
+            st.session_state.pop('diff_data', None)
             st.rerun()
 
 
@@ -589,7 +630,7 @@ def _render_step_final(supabase, ai_client, selected_tags):
         st.session_state['uploader_key'] = st.session_state.get('uploader_key', 0) + 1
         for key in ['daily_stock_list', 'current_step', 'temp_extracted_data', 'balloons_shown',
                     'toast_shown', 'processed_image', 'current_tags', 'chat_messages',
-                    'final_result', 'final_error']:
+                    'final_result', 'final_error', 'verified_parsed_data', 'diff_data']:
             st.session_state.pop(key, None)
         st.rerun()
 
