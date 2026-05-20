@@ -228,7 +228,8 @@ def get_usd_to_krw(time_bucket: str = "") -> float:
         if data.empty:
             # [수정 #12] 마지막 성공 환율 캐시 사용
             return st.session_state.get("_last_usd_krw", _FALLBACK)
-        val = float(data["Close"].iloc[-1])
+        _c = data["Close"].iloc[-1]
+        val = float(_c.iloc[0] if hasattr(_c, "iloc") else _c)
         if math.isnan(val):
             return st.session_state.get("_last_usd_krw", _FALLBACK)
         # 성공한 환율을 세션에 캐싱
