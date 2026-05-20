@@ -6,10 +6,23 @@ from ui_components import card, banner, sanitize_html
 from prices import get_usd_to_krw, _market_time_bucket
 
 def render_records_tab(supabase):
-    st.markdown("### 📚 나의 투자 기록장")
-    st.markdown("<p style='color: #4E5968; font-size: 0.95em;'>과거에 기록한 일기와 AI 멘토의 피드백을 모아볼 수 있습니다.</p>", unsafe_allow_html=True)
-
     user_id = st.session_state.get("user_id")
+    if not user_id:
+        banner("로그인이 필요합니다.", type="warning")
+        return
+
+    st.markdown("### 📊 나의 자산 성장 기록")
+    
+    # 1. 배당 시계 (가장 직관적인 숫자)
+    render_dividend_clock(supabase, user_id)
+    
+    # 2. 복리 시뮬레이터 (미래 기대감)
+    render_future_simulator(supabase, user_id)
+    
+    # 3. 과거 멘탈 회고 (성장 서사)
+    render_past_reflection(supabase, user_id)
+
+    st.markdown("---")
 
     # ── 최근 30일 나의 투자 성과 브리핑 ────────────────────
     if user_id:
@@ -149,10 +162,6 @@ def render_records_tab(supabase):
                         unsafe_allow_html=True,
                     )
 
-        # ── 추가 분석 컴포넌트 ──────────────────────────────
-        render_dividend_clock(supabase, user_id)
-        render_future_simulator(supabase, user_id)
-        render_past_reflection(supabase, user_id)
 
     st.markdown("<div style='margin:16px 0'></div>", unsafe_allow_html=True)
     if not user_id:
@@ -265,6 +274,7 @@ def render_records_tab(supabase):
 
 
 def render_dividend_clock(supabase, user_id: str):
+    """배당 시계: 누적 투자금액 대비 시간당 수익 계산"""
     inventory = get_real_inventory(user_id, supabase)
     if not inventory:
         return
@@ -273,26 +283,32 @@ def render_dividend_clock(supabase, user_id: str):
     usd_krw = get_usd_to_krw(_market_time_bucket())
     for item in inventory:
         val = item["수량"] * item["평단가"]
-        # 실시간 환율 적용
         if item["통화"] == "USD":
-            val *= usd_krw
+            val *= usd_krw # 실시간 환율 적용
         total_invested_krw += val
 
-    # 보수적 예상 연 배당률 3% 가정
-    annual_dividend = total_invested_krw * 0.03
+    annual_dividend = total_invested_krw * 0.03 # 예상 연 배당률 3%
     hourly_wage = annual_dividend / (365 * 24)
     
     if hourly_wage > 0:
-        content = (
-            f"<div style='font-size: 1.1em;'>당신의 자산은 지금 이 순간에도 <b>시간당 <span style='color: #3182F6;'>{hourly_wage:,.0f}원</span></b>을 벌고 있습니다.</div>"
-            f"<div style='font-size: 0.85em; color: #8B95A1; margin-top: 8px;'>※ 현재 투자원금 기준 (예상 연 배당률 3% 적용)</div>"
-        )
-        card(title="⏰ 쉬지 않는 배당 시계", content_html=content, icon="⏳")
+        content = f"""
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
+            <div>
+                <div style="font-size: 0.95rem; color: #4E5968;">내 자본의 시급은?</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #3182F6; margin-top: 4px;">
+                    시간당 {hourly_wage:,.0f}원 ⏰
+                </div>
+            </div>
+        </div>
+        <div style="font-size: 0.85rem; color: #8B95A1; margin-top: 12px; background: #F2F4F6; padding: 8px 12px; border-radius: 8px;">
+            ※ 현재 투자 원금 기준 (예상 연 배당률 3% 복리 제외)
+        </div>
+        """
+        card(title="", content_html=content)
 
 
 def render_future_simulator(supabase, user_id: str):
-    st.markdown("### 🚀 N년 후 배당 시뮬레이터")
-    
+    """N년 후 배당 시뮬레이터"""
     inventory = get_real_inventory(user_id, supabase)
     current_principal = 0
     usd_krw = get_usd_to_krw(_market_time_bucket())
@@ -303,20 +319,18 @@ def render_future_simulator(supabase, user_id: str):
                 val *= usd_krw
             current_principal += val
 
-    with st.expander("🔮 미래 내 배당금은 얼마일까?", expanded=True):
+    with st.expander("🔮 복리의 마법: 미래 내 배당금은 얼마일까?"):
         col1, col2 = st.columns(2)
         with col1:
-            monthly_add = st.number_input("월 추가 적립액 (만원)", min_value=0, value=50, step=10)
+            monthly_add = st.number_input("월 적립액 (만원)", min_value=0, value=50, step=10)
         with col2:
             years = st.slider("투자 기간 (년)", min_value=1, max_value=30, value=10)
             
-        # 연평균 성장률(CAGR) 7%, 배당률 3% 복리 가정
-        annual_growth_rate = 0.07 
-        dividend_yield = 0.03
+        annual_growth_rate = 0.07 # 연평균 성장 7%
+        dividend_yield = 0.03     # 배당률 3%
         
-        # 1. 현재 원금의 N년 후 가치
+        # 복리 계산식
         future_val_principal = current_principal * ((1 + annual_growth_rate) ** years)
-        # 2. 월 적립금의 N년 후 가치 (기수불 복리 연금 종가)
         monthly_add_krw = monthly_add * 10000
         months = years * 12
         monthly_rate = annual_growth_rate / 12
@@ -325,20 +339,26 @@ def render_future_simulator(supabase, user_id: str):
             future_val_monthly = monthly_add_krw * (((1 + monthly_rate) ** months - 1) / monthly_rate) * (1 + monthly_rate)
         else:
             future_val_monthly = monthly_add_krw * months
-        
+            
         total_future_asset = future_val_principal + future_val_monthly
         expected_monthly_dividend = (total_future_asset * dividend_yield) / 12
         
-        content = (
-            f"<div>{years}년 뒤 당신의 예상 자산은 <b>{total_future_asset/100000000:,.1f}억 원</b>이며,</div>"
-            f"<div style='font-size: 1.2em; margin-top: 5px;'>매월 <b><span style='color: #3182F6;'>{expected_monthly_dividend/10000:,.0f}만 원</span></b>의 배당금을 받게 됩니다.</div>"
-        )
-        card(title=f"{years}년 후의 정원", content_html=content, icon="🌳")
+        content = f"""
+        <div style="text-align: center; padding: 12px 0;">
+            <div style="font-size: 1rem; color: #4E5968; margin-bottom: 8px;">{years}년 뒤 매월 받을 배당금</div>
+            <div style="font-size: 2.2rem; font-weight: 800; color: #3182F6;">{expected_monthly_dividend/10000:,.0f}만 원 💸</div>
+            <hr style="border: 0; border-top: 1px dashed #E5E8EB; margin: 20px 0;">
+            <div style="font-size: 0.95rem; color: #4E5968;">예상 총 자산: <b>{total_future_asset/100000000:,.1f}억 원</b></div>
+            <div style="font-size: 0.8rem; color: #8B95A1; margin-top: 8px;">※ 연 성장 7%, 배당 3% 가정</div>
+        </div>
+        """
+        card(title="", content_html=content)
 
 
 def render_past_reflection(supabase, user_id: str):
-    # 가장 흔들렸던 과거 기록 중 하나를 가져옵니다 (최소 14일 이전 기록 필터링)
-    thirty_days_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=14)).isoformat()
+    """과거의 나와 비교 (AI 성장 서사)"""
+    # 30일 이전의 흔들렸던 감정 기록 탐색
+    thirty_days_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat()
     
     try:
         resp = (
@@ -357,14 +377,20 @@ def render_past_reflection(supabase, user_id: str):
 
     if past_journal:
         past_date = to_kst_str(past_journal["created_at"]).split()[0]
-        past_content = past_journal["content"]
+        # XSS 방어를 위해 사용자 작성 내용은 반드시 이스케이프 처리
+        safe_content = html.escape(past_journal["content"])
         
-        # HTML 태그 이스케이프 (보안 규칙 준수)
-        safe_content = html.escape(past_content)
-        
-        content = (
-            f"<div style='color: #8B95A1; font-size: 0.9em; margin-bottom: 8px;'>📅 {past_date}의 일기</div>"
-            f"<div style='font-style: italic; background: #F2F4F6; padding: 12px; border-radius: 8px; margin-bottom: 12px;'>\"{safe_content}\"</div>"
-            f"<div>그때는 불안해하며 흔들렸지만, 지금 당신은 훌륭하게 장기 투자의 길을 걷고 있습니다. <b>과거의 위기를 넘긴 당신을 칭찬합니다!</b> 👏</div>"
-        )
-        card(title="🕰️ 과거에서 온 편지", content_html=content, icon="✉️")
+        content = f"""
+        <div style="background: #F0F4FF; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+            <div style="font-size: 0.85rem; color: #3182F6; font-weight: 700; margin-bottom: 8px;">
+                📅 {past_date}의 일기
+            </div>
+            <div style="font-size: 0.95rem; color: #4E5968; font-style: italic; line-height: 1.5;">
+                "{safe_content}"
+            </div>
+        </div>
+        <div style="font-size: 0.95rem; color: #191F28; line-height: 1.6;">
+            과거에는 불안함에 흔들렸지만, 지금 당신의 자산은 굳건하게 성장 중입니다. <b>위기를 넘기고 투자를 지속한 스스로를 칭찬해주세요!</b> 👏
+        </div>
+        """
+        card(title="🕰️ AI가 찾아낸 과거의 기록", content_html=content, icon="🌱")
