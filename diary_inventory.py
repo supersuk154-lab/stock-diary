@@ -316,9 +316,11 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                 _ticker = item_tickers.get(_item["종목"])
                 _price = bulk_prices.get(_ticker) if _ticker else None
                 if _price and _item["수량"] > 0:
-                    if _item["통화"] == "KRW":
+                    is_kr_stock = _ticker.endswith(".KS") or _ticker.endswith(".KQ") if _ticker else False
+                    if is_kr_stock:
                         total_krw += _price * _item["수량"]
                     else:
+                        # US stock (native price in USD) -> convert to KRW
                         total_krw += _price * _item["수량"] * usd_rate
                 else:
                     all_priced = False
@@ -340,9 +342,21 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                 current_price = bulk_prices.get(ticker) if ticker else None
                 has_valid_price = current_price is not None and current_price > 0
                 currency = "원" if item["통화"] == "KRW" else "$"
+                
+                # yfinance에서 가져온 시세는 한국 주식(.KS/.KQ)의 경우 KRW, 미국 주식의 경우 USD임.
+                # 포트폴리오 항목의 기록된 통화(item["통화"])와 일치하도록 가격을 변환합니다.
+                display_price = current_price
+                if has_valid_price and ticker:
+                    is_kr_stock = ticker.endswith(".KS") or ticker.endswith(".KQ")
+                    stock_currency = "KRW" if is_kr_stock else "USD"
+                    
+                    if stock_currency == "USD" and item["통화"] == "KRW":
+                        display_price = current_price * usd_rate
+                    elif stock_currency == "KRW" and item["통화"] == "USD":
+                        display_price = current_price / usd_rate if usd_rate > 0 else current_price
     
                 if has_valid_price:
-                    price_str = f"{current_price:,.0f}" if item["통화"] == "KRW" else f"{current_price:,.2f}"
+                    price_str = f"{display_price:,.0f}" if item["통화"] == "KRW" else f"{display_price:,.2f}"
                     p_type = get_price_type(ticker)
                     if p_type == "실시간":
                         badge_html = '<span style="font-size:0.72em; padding:2px 6px; border-radius:4px; background-color:#E8F3FF; color:#3182F6; margin-left:5px; font-weight:600; vertical-align:middle;">실시간</span>'
@@ -358,7 +372,7 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                     price_html = '<span style="font-weight:600; font-size:0.9em; color:#8B95A1;">수신 지연 📡</span>'
     
                 if has_valid_price and item["평단가"] > 0:
-                    profit_rate = ((current_price - item["평단가"]) / item["평단가"]) * 100
+                    profit_rate = ((display_price - item["평단가"]) / item["평단가"]) * 100
                     sign = "+" if profit_rate > 0 else ""
                     if profit_rate > 0:
                         rate_color = "#F04452"

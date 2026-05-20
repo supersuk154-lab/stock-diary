@@ -367,28 +367,38 @@ def get_real_inventory(user_id: str, _supabase):
 
             qty = -abs(raw_qty) if trade_type == "sell" else abs(raw_qty)
 
-            if name not in inventory_map:
-                inventory_map[name] = {
-                    "현재수량": 0, "총매수수량": 0, "총매수금액": 0,
-                    "통화": currency, "ticker": ticker,
+            # 종목명 정규화 (앞뒤 및 다중 공백 정리)
+            normalized_name = " ".join(name.split())
+            
+            # 티커가 존재하면 티커를 대표 키로 삼아 병합, 없으면 정규화된 종목명을 대표 키로 삼음
+            group_key = ticker if ticker else normalized_name
+
+            if group_key not in inventory_map:
+                inventory_map[group_key] = {
+                    "현재수량": 0,
+                    "총매수수량": 0,
+                    "총매수금액": 0,
+                    "통화": currency,
+                    "ticker": ticker,
+                    "종목": name,  # 대표 종목명
                 }
 
             # 기존 레코드에 ticker가 없고 새 레코드에 있으면 업데이트
-            if not inventory_map[name]["ticker"] and ticker:
-                inventory_map[name]["ticker"] = ticker
+            if not inventory_map[group_key]["ticker"] and ticker:
+                inventory_map[group_key]["ticker"] = ticker
 
             if qty > 0:
-                inventory_map[name]["총매수수량"] += qty
-                inventory_map[name]["총매수금액"] += (qty * price)
+                inventory_map[group_key]["총매수수량"] += qty
+                inventory_map[group_key]["총매수금액"] += (qty * price)
 
-            inventory_map[name]["현재수량"] += qty
+            inventory_map[group_key]["현재수량"] += qty
 
         result = []
-        for name, data in inventory_map.items():
+        for group_key, data in inventory_map.items():
             if data["현재수량"] > 0:
                 avg_price = data["총매수금액"] / data["총매수수량"] if data["총매수수량"] > 0 else 0
                 result.append({
-                    "종목": name,
+                    "종목": data["종목"],
                     "수량": data["현재수량"],
                     "평단가": avg_price,
                     "통화": data["통화"],

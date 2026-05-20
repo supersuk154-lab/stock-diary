@@ -212,12 +212,27 @@ def _render_step_verify(supabase):
         extracted_dict = {}
         _parse_error = True
 
-    current_inventory = {item["종목"]: item["수량"] for item in get_real_inventory(st.session_state["user_id"], supabase)}
+    inventory = get_real_inventory(st.session_state["user_id"], supabase)
+    
+    # 대표 티커 혹은 정규화된 종목명으로 매칭 맵 구축
+    # key: ticker가 있으면 ticker, 없으면 정규화된 종목명
+    # value: 수량
+    inventory_match_map = {}
+    for item in inventory:
+        item_ticker = item.get("ticker")
+        norm_name = " ".join(item["종목"].split())
+        match_key = item_ticker if item_ticker else norm_name
+        inventory_match_map[match_key] = float(item["수량"])
 
     diff_data = {}
     if not _parse_error:
         for stock, new_qty in extracted_dict.items():
-            old_qty = float(current_inventory.get(stock, 0))
+            # 업로드 이미지에서 파싱한 종목명도 동일한 규칙으로 매칭 키 생성
+            stock_norm = " ".join(stock.split())
+            stock_ticker = resolve_ticker(stock_norm)
+            match_key = stock_ticker if stock_ticker else stock_norm
+            
+            old_qty = inventory_match_map.get(match_key, 0.0)
             change  = new_qty - old_qty
             if change != 0:
                 diff_data[stock] = {"change": change, "old": old_qty, "new": new_qty}
