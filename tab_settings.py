@@ -75,43 +75,6 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
     except Exception as e:
         banner(f"백업 데이터 조회 실패: {e}", type="error")
 
-    # 2.5. 앱 로그 내보내기
-    st.markdown("---")
-    st.markdown("#### 📜 앱 동작 로그 다운로드")
-    st.markdown("<p style='color: #8B95A1; font-size: 0.88em; margin-bottom: 12px;'>로그인, 데이터 저장, AI 상호작용 등 최근 동작 로그를 CSV 파일로 다운로드하여 확인할 수 있습니다.</p>", unsafe_allow_html=True)
-
-    try:
-        log_rows = (
-            supabase.table("app_logs")
-            .select("created_at, level, event, message, extra")
-            .eq("user_id", _uid)
-            .order("created_at", desc=True)
-            .limit(1000)  # 최근 1000개만 조회
-            .execute()
-            .data
-        )
-
-        if log_rows:
-            # Pandas DataFrame으로 변환 및 가공
-            df_logs = pd.DataFrame(log_rows)
-            df_logs["created_at_kst"] = df_logs["created_at"].apply(to_kst_str)
-            df_logs = df_logs[["created_at_kst", "level", "event", "message", "extra"]]
-            df_logs.columns = ["발생시각(KST)", "로그레벨", "이벤트", "메시지", "상세데이터"]
-
-            # Excel 한글 깨짐 방지를 위해 utf-8-sig 인코딩 적용
-            csv_data = df_logs.to_csv(index=False, encoding="utf-8-sig")
-
-            st.download_button(
-                label=f"📥 앱 동작 로그 {len(log_rows)}개 다운로드 (.csv)",
-                data=csv_data,
-                file_name=f"app_logs_{today_str}.csv",
-                mime="text/csv",
-            )
-        else:
-            banner("조회된 앱 로그가 아직 없습니다. 앱 활동이 기록되면 여기에 나타납니다.", type="info")
-    except Exception as e:
-        banner(f"로그 데이터 조회 실패: {e}", type="error")
-
     # 3. 티커 관리자
     st.markdown("---")
     st.markdown("#### 🎯 티커 관리자")
@@ -560,6 +523,21 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
                         "user_id": st.column_config.TextColumn(width="small"),
                         "extra":   st.column_config.TextColumn(width="large"),
                     },
+                )
+
+                # Excel 한글 깨짐 방지를 위해 utf-8-sig 인코딩 적용하여 다운로드 추가
+                df_download = pd.DataFrame(logs)
+                df_download["created_at_kst"] = df_download["created_at"].apply(to_kst_str)
+                df_download = df_download[["created_at_kst", "level", "event", "message", "user_id", "extra"]]
+                df_download.columns = ["발생시각(KST)", "로그레벨", "이벤트", "메시지", "사용자ID", "상세데이터"]
+                csv_data = df_download.to_csv(index=False, encoding="utf-8-sig")
+
+                st.download_button(
+                    label=f"📥 조회된 로그 {len(logs)}개 CSV 다운로드",
+                    data=csv_data,
+                    file_name=f"admin_app_logs_{today_str}.csv",
+                    mime="text/csv",
+                    key="admin_log_download_btn",
                 )
             else:
                 banner("조건에 맞는 로그가 없습니다.", type="info")
