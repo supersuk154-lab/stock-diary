@@ -158,7 +158,6 @@ def render_chat_section(supabase, ai_client) -> list:
 
     # ── 태그 선택 (접힌 상태로 시작 — 선택사항) ─────────────────
     with st.expander("🏷️ 오늘의 상태 태그 추가 (선택)", expanded=False):
-        st.caption("🏃‍♂️ 나의 투자 루틴 (가점)")
         routine_tags = st.pills(
             "루틴",
             [TAG_SALARY_BUY, TAG_DIVIDEND, TAG_PRAISE_PAST],
@@ -166,7 +165,6 @@ def render_chat_section(supabase, ai_client) -> list:
             selection_mode="multi",
             key="pills_routine",
         )
-        st.caption("🛡️ 멘탈 방어 성공 (가점)")
         defense_tags = st.pills(
             "방어",
             [TAG_HOLD, TAG_DIDNT_CHECK, TAG_TAKE_BREAK],
@@ -174,7 +172,6 @@ def render_chat_section(supabase, ai_client) -> list:
             selection_mode="multi",
             key="pills_defense",
         )
-        st.caption("🚨 감정 및 반성 (AI 멘토링)")
         emotion_tags = st.pills(
             "감정",
             [TAG_SHAKY, TAG_IMPULSE_TRADE, TAG_MISTAKE],
