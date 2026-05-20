@@ -42,9 +42,9 @@ if not _icon_path.exists() and _icon_fallback.exists():
 
 if _icon_path.exists():
     _pil_icon = Image.open(_icon_path)
-    st.set_page_config(page_title="AI 주식 다이어리", page_icon=_pil_icon, layout="centered")
+    st.set_page_config(page_title="AI 주식메이트", page_icon=_pil_icon, layout="centered")
 else:
-    st.set_page_config(page_title="AI 주식 다이어리", page_icon="📈", layout="centered")
+    st.set_page_config(page_title="AI 주식메이트", page_icon="📈", layout="centered")
 
 # PWA manifest + 메타태그를 메인 페이지(window.parent.document)에 직접 주입.
 # components.html()은 iframe 안에서 실행되므로 window.parent 경유가 필수.
@@ -58,16 +58,17 @@ components.html("""
         if (existing) existing.remove();
         var manifest = doc.createElement('link');
         manifest.rel = 'manifest';
-        manifest.href = '/app/static/manifest.json';
+        manifest.href = '/app/static/manifest.json?v=2';
         doc.head.appendChild(manifest);
 
         // iOS 홈 화면 아이콘
-        if (!doc.querySelector('link[rel="apple-touch-icon"]')) {
-            var appleIcon = doc.createElement('link');
-            appleIcon.rel = 'apple-touch-icon';
-            appleIcon.href = '/app/static/icon.png';
-            doc.head.appendChild(appleIcon);
-        }
+        var existingAppleIcon = doc.querySelector('link[rel="apple-touch-icon"]');
+        if (existingAppleIcon) existingAppleIcon.remove();
+        
+        var appleIcon = doc.createElement('link');
+        appleIcon.rel = 'apple-touch-icon';
+        appleIcon.href = '/app/static/icon_192.png?v=2';
+        doc.head.appendChild(appleIcon);
 
         // 앱 이름 (iOS)
         var metaTitle = doc.querySelector('meta[name="apple-mobile-web-app-title"]');
@@ -76,7 +77,7 @@ components.html("""
             metaTitle.name = 'apple-mobile-web-app-title';
             doc.head.appendChild(metaTitle);
         }
-        metaTitle.content = '주식일기';
+        metaTitle.content = '주식메이트';
 
         // standalone 모드 (iOS / Android)
         ['apple-mobile-web-app-capable', 'mobile-web-app-capable'].forEach(function(name) {
@@ -429,7 +430,7 @@ if "chosen_mentor" not in st.session_state:
 
 
 # ==========================================
-st.title("📈 AI 주식 페이스메이커")
+st.title("📈 AI 주식메이트")
 st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
 
 # [추가] 사이드바 상단에 로그인 정보 + 로그아웃 버튼

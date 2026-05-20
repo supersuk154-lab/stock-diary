@@ -1,6 +1,6 @@
 {
-  "name": "AI 주식 페이스메이커",
-  "short_name": "주식일기",
+  "name": "AI 주식메이트",
+  "short_name": "주식메이트",
   "description": "흔들리지 않는 장기 투자의 시작",
   "start_url": ".",
   "display": "standalone",
@@ -8,16 +8,28 @@
   "theme_color": "#3182F6",
   "icons": [
     {
-      "src": "/app/static/icon.png",
+      "src": "/app/static/icon_192.png?v=2",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/app/static/icon.png",
+      "src": "/app/static/icon_192.png?v=2",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/app/static/icon_512.png?v=2",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/app/static/icon_512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

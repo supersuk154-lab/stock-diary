@@ -345,7 +345,7 @@ def _render_step_final(supabase, ai_client, selected_tags):
         st.session_state["last_ai_call"] = time.time()
 
         with st.spinner('오늘의 전체 투자 내역을 바탕으로 멘토가 분석 중입니다...'):
-            base_instruction = """당신은 장기 투자자의 매매 일지 작성을 돕는 냉철하고 지혜로운 AI 페이스메이커입니다.
+            base_instruction = """당신은 장기 투자자의 매매 일지 작성을 돕는 냉철하고 지혜로운 AI 주식메이트입니다.
 사용자가 매매 메모(텍스트)와 함께 MTS 캡처 사진을 올릴 수 있습니다.
 
 [임무]

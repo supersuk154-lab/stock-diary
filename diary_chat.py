@@ -138,7 +138,7 @@ def render_chat_section(supabase, ai_client) -> list:
                     for m in recent_history
                 ])
     
-                system_instruction = f"""당신은 장기 투자자의 멘탈을 지켜주는 AI 페이스메이커이자, 산전수전을 다 겪은 노련한 실전 투자 코치입니다.
+                system_instruction = f"""당신은 장기 투자자의 멘탈을 지켜주는 AI 주식메이트이자, 산전수전을 다 겪은 노련한 실전 투자 코치입니다.
 단순한 위로나 의미 없는 대화를 넘어, 사용자에게 '장기 투자에 대한 흔들림 없는 확신'을 심어주는 것이 당신의 최종 목표입니다.
 
 사용자가 오늘 선택한 감정/상태 태그: {tags_str}
