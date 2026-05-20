@@ -405,7 +405,11 @@ toss_style = """
         }
 
         /* 탭바 모바일 하단 플로팅 고정 테마 */
+        /* stTabs 전체가 아닌 탭 버튼 목록(tablist)만 하단 고정 → 패널 스크롤 정상 동작 */
         div[data-testid="stTabs"] {
+            position: relative !important;
+        }
+        div[data-testid="stTabs"] [role="tablist"] {
             position: fixed !important;
             bottom: 0 !important;
             left: 0 !important;
@@ -413,8 +417,17 @@ toss_style = """
             background-color: #FFFFFF !important;
             border-top: 1px solid #E5E8EB !important;
             z-index: 999999 !important;
-            padding: 10px 16px max(10px, env(safe-area-inset-bottom)) 16px !important;
+            padding: 4px 16px max(6px, env(safe-area-inset-bottom)) 16px !important;
             box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05) !important;
+            display: flex !important;
+            justify-content: space-around !important;
+            width: 100% !important;
+        }
+        /* 탭 패널은 스크롤 가능하게 — 하단 탭바 높이(약 60px)만큼 여백 확보 */
+        div[data-testid="stTabs"] [role="tabpanel"] {
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding-bottom: 80px !important;
         }
 
         /* 탭 버튼 터치 영역 및 폰트 크기 조정 */
