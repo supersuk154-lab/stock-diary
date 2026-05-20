@@ -132,32 +132,44 @@ def get_realtime_prices_bulk(tickers: tuple, time_bucket: str = "") -> dict:
     반환: {ticker: price} 딕셔너리"""
     if not tickers:
         return {}
-    try:
-        # 주말/휴장일 대응을 위해 period="5d" 사용
-        data = yf.download(list(tickers), period="5d", auto_adjust=True, progress=False)
+
+    def _parse(data) -> dict:
         prices = {}
         if data.empty:
-            return {}
-        
-        is_df = hasattr(data["Close"], "columns")
+            return prices
+        close = data["Close"]
+        is_df = hasattr(close, "columns")
         for ticker in tickers:
             try:
-                if is_df:
-                    if ticker in data["Close"].columns:
-                        series = data["Close"][ticker].dropna()
-                    else:
-                        series = []
-                else:
-                    series = data["Close"].dropna()
-                
-                if len(series) > 0:
-                    val = float(series.iloc[-1])
-                    prices[ticker] = None if math.isnan(val) else val
-                else:
+                series = (close[ticker] if is_df and ticker in close.columns
+                          else (close if not is_df else None))
+                if series is None:
                     prices[ticker] = None
+                    continue
+                series = series.dropna()
+                val = float(series.iloc[-1]) if len(series) > 0 else None
+                prices[ticker] = None if (val is None or math.isnan(val)) else val
             except Exception:
                 prices[ticker] = None
         return prices
+
+    try:
+        # 1차 시도: 5분봉 (장중 실시간에 가깝게, 주말/휴장일에도 최근 데이터 포함)
+        data = yf.download(
+            list(tickers), period="1d", interval="5m",
+            auto_adjust=True, progress=False
+        )
+        prices = _parse(data)
+        # 유효 가격이 하나라도 있으면 반환
+        if any(v is not None for v in prices.values()):
+            return prices
+    except Exception:
+        prices = {}
+
+    try:
+        # 2차 폴백: 일봉 (주말·휴장일 종가 보장)
+        data = yf.download(list(tickers), period="5d", auto_adjust=True, progress=False)
+        return _parse(data)
     except Exception:
         return {}
 
@@ -182,14 +194,11 @@ def get_market_weather(time_bucket: str = "") -> dict:
     반환: {지수명: {"current": float, "change_pct": float} | None}"""
     tickers = list(_MARKET_INDICES.values())
     result = {name: None for name in _MARKET_INDICES}
-    try:
-        data = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
-        if data.empty:
-            return result
-        close = data["Close"]
+
+    def _calc(close_df):
         for name, ticker in _MARKET_INDICES.items():
             try:
-                series = close[ticker] if len(tickers) > 1 else close
+                series = close_df[ticker] if len(tickers) > 1 else close_df
                 series = series.dropna()
                 if len(series) < 2:
                     continue
@@ -200,8 +209,25 @@ def get_market_weather(time_bucket: str = "") -> dict:
                 result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
             except Exception:
                 pass
+
+    try:
+        # 1차: 5분봉 2일치 → 장중 실시간 등락률
+        data = yf.download(tickers, period="2d", interval="5m", auto_adjust=True, progress=False)
+        if not data.empty:
+            _calc(data["Close"])
+            if any(v is not None for v in result.values()):
+                return result
     except Exception:
         pass
+
+    try:
+        # 2차 폴백: 일봉 (주말·휴장일)
+        data = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
+        if not data.empty:
+            _calc(data["Close"])
+    except Exception:
+        pass
+
     return result
 
 
