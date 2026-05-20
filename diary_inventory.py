@@ -1,7 +1,7 @@
 import streamlit as st
 import datetime
 import html
-from prices import _market_time_bucket, resolve_ticker, get_realtime_prices_bulk, get_usd_to_krw
+from prices import _market_time_bucket, resolve_ticker, get_realtime_prices_bulk, get_usd_to_krw, get_price_type
 from db import get_real_inventory, get_dividend_total
 from ui_components import banner
 from ai_helper import normalize_stock_name
@@ -333,7 +333,12 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
     
                 if has_valid_price:
                     price_str = f"{current_price:,.0f}" if item["통화"] == "KRW" else f"{current_price:,.2f}"
-                    price_html = f'<span style="font-weight:700; font-size:1.05em; color:#191F28;">{price_str}{currency}</span>'
+                    p_type = get_price_type(ticker)
+                    if p_type == "실시간":
+                        badge_html = '<span style="font-size:0.72em; padding:2px 6px; border-radius:4px; background-color:#E8F3FF; color:#3182F6; margin-left:5px; font-weight:600; vertical-align:middle;">실시간</span>'
+                    else:
+                        badge_html = '<span style="font-size:0.72em; padding:2px 6px; border-radius:4px; background-color:#F2F4F6; color:#6B7684; margin-left:5px; font-weight:500; vertical-align:middle;">종가</span>'
+                    price_html = f'<span style="font-weight:700; font-size:1.05em; color:#191F28;">{price_str}{currency}</span>{badge_html}'
                 elif item["평단가"] > 0:
                     avg_str = f"{item['평단가']:,.0f}" if item["통화"] == "KRW" else f"{item['평단가']:,.2f}"
                     price_html = (f'<span style="font-weight:700; font-size:1.05em; color:#8B95A1;">'

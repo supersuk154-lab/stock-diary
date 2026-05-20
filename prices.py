@@ -140,10 +140,15 @@ def get_realtime_prices_bulk(tickers: tuple, time_bucket: str = "") -> dict:
         for ticker in tickers:
             try:
                 if len(tickers) == 1:
-                    val = float(data["Close"].iloc[-1])
+                    series = data["Close"].dropna()
                 else:
-                    val = float(data["Close"][ticker].iloc[-1])
-                prices[ticker] = None if math.isnan(val) else val
+                    series = data["Close"][ticker].dropna()
+                
+                if not series.empty:
+                    val = float(series.iloc[-1])
+                    prices[ticker] = None if math.isnan(val) else val
+                else:
+                    prices[ticker] = None
             except Exception:
                 prices[ticker] = None
         return prices
@@ -211,3 +216,32 @@ def get_usd_to_krw(time_bucket: str = "") -> float:
         return val
     except Exception:
         return st.session_state.get("_last_usd_krw", _FALLBACK)
+
+
+def get_price_type(ticker: str) -> str:
+    """티커와 현재 시각을 기준으로 실시간 시세인지 종가 시세인지를 판별합니다."""
+    if not ticker:
+        return "종가"
+    
+    # 한국 시간 기준
+    now = datetime.datetime.now(KST)
+    
+    # 주말(토, 일)은 무조건 종가
+    if now.weekday() >= 5:
+        return "종가"
+        
+    h, m = now.hour, now.minute
+    
+    # 한국 주식 (.KS 또는 .KQ)
+    if ticker.endswith(".KS") or ticker.endswith(".KQ"):
+        # 9:00 ~ 15:30
+        if (9, 0) <= (h, m) <= (15, 30):
+            return "실시간"
+        return "종가"
+    else:
+        # 미국 주식 (서머타임 고려하여 21:30 ~ 05:00)
+        # 21:30 ~ 24:00 또는 00:00 ~ 05:00
+        if (h >= 22 or (h == 21 and m >= 30)) or (h < 5):
+            return "실시간"
+        return "종가"
+
