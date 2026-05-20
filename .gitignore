@@ -25,6 +25,11 @@ CONTEXT_COMPRESSION_SPEC.md
 *.jpeg
 *.png
 
+# static 폴더 아이콘은 배포에 필요하므로 예외
+!static/*.png
+!static/*.jpg
+!static/*.jpeg
+
 # OS
 .DS_Store
 Thumbs.db
