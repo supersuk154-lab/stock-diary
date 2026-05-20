@@ -16,70 +16,62 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
 
     # ── 📖 앱 사용 설명서 (최상단 배치) ──────────────────────────────────
     with st.expander("📖 AI 주식 다이어리 핵심 사용 가이드", expanded=True):
-        guide_html = """
-        <div style="font-family: Pretendard, sans-serif; line-height: 1.6; color: #333D4B;">
-            <p style="font-size: 0.92em; color: #4E5968; margin-bottom: 20px;">
-                이 다이어리는 투자 기록 관리(Track 1)와 AI 심리 코칭(Track 2)을 결합하여 
-                장기 투자를 끈기 있게 완수할 수 있도록 돕는 스마트 개인 포트폴리오 솔루션입니다.
-            </p>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px;">
-                
-                <!-- Track 1 카드 -->
-                <div style="background: #F8F9FA; border-radius: 14px; padding: 18px; border: 1px solid #F2F4F6;">
-                    <div style="font-weight: 700; font-size: 1.02em; color: #3182F6; margin-bottom: 10px; display: flex; align-items: center;">
-                        <span style="font-size: 1.25em; margin-right: 8px;">📸</span> Track 1: 투자 자산 기록
-                    </div>
-                    <ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #4E5968; line-height: 1.6;">
-                        <li><b>스크린샷 인식:</b> 매수 잔고 화면(KB증권, 영웅문 등) 캡처 이미지를 일기장 탭에 올리세요.</li>
-                        <li><b>자동 검증 절차:</b> AI가 인식한 수량·평단가를 보여주며, 기존 보유 주식과의 일치 여부를 정밀 검증 후 저장합니다.</li>
-                        <li><b>수동 기입 지원:</b> 수동 입력 모드를 통해 일괄/개별 거래 내역도 직접 기입할 수 있습니다.</li>
-                    </ul>
-                </div>
-                
-                <!-- Track 2 카드 -->
-                <div style="background: #F8F9FA; border-radius: 14px; padding: 18px; border: 1px solid #F2F4F6;">
-                    <div style="font-weight: 700; font-size: 1.02em; color: #10B981; margin-bottom: 10px; display: flex; align-items: center;">
-                        <span style="font-size: 1.25em; margin-right: 8px;">💬</span> Track 2: 멘탈 조절 & 피드백
-                    </div>
-                    <ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #4E5968; line-height: 1.6;">
-                        <li><b>심리 태그:</b> 불안하다, 매도 충동, 홀가분하다 등 현재 감정 상태의 태그를 클릭해 활성화해 보세요.</li>
-                        <li><b>맞춤 멘토 코칭:</b> 사이드바에서 멘토 유형(츤데레, 냉철, 따뜻 등)을 고르면 그에 맞는 맞춤 답변을 실시간으로 제공합니다.</li>
-                        <li><b>하단 탭바 & 채팅:</b> 모바일 화면에 맞춰 탭바가 하단에 고정되며, 엔터 키 전송을 지원하는 네이티브 채팅창으로 대화합니다.</li>
-                    </ul>
-                </div>
-                
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 12px;">
-                
-                <!-- 보물함 카드 -->
-                <div style="background: #F8F9FA; border-radius: 14px; padding: 18px; border: 1px solid #F2F4F6;">
-                    <div style="font-weight: 700; font-size: 1.02em; color: #EAB308; margin-bottom: 10px; display: flex; align-items: center;">
-                        <span style="font-size: 1.25em; margin-right: 8px;">👑</span> 보물함 (실시간 시세 연동)
-                    </div>
-                    <ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #4E5968; line-height: 1.6;">
-                        <li><b>실시간 평가:</b> Yahoo Finance API와 실시간 연동되어 내 보유 자산의 가치와 수익률을 계산합니다.</li>
-                        <li><b>경제적 자유 게이지:</b> 목표 배당금 수령에 맞춰 그라데이션 프로그레스 바가 차오릅니다.</li>
-                        <li><b>가족 분담금 역할극:</b> 배당 기여도에 따라 '든든한 맏형', '야무진 막내' 등 배당금이 의인화되어 재미를 줍니다.</li>
-                    </ul>
-                </div>
-
-                <!-- 꿀팁 카드 -->
-                <div style="background: #EBF5FF; border-radius: 14px; padding: 18px; border: 1px solid #D0E6FF;">
-                    <div style="font-weight: 700; font-size: 1.02em; color: #1B64DA; margin-bottom: 10px; display: flex; align-items: center;">
-                        <span style="font-size: 1.25em; margin-right: 8px;">💡</span> 실전 다이어리 200% 활용 팁
-                    </div>
-                    <ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #1B64DA; line-height: 1.6;">
-                        <li>매매가 없는 날이라도 가벼운 멘탈 일기나 감정 태그만 기록해 두면 AI가 미래의 흔들리는 내 멘탈을 위한 <b>과거 데이터 처방전</b>을 쓸 수 있습니다.</li>
-                        <li>실시간 가격 연동을 위해서는 각 종목별 <b>야후파이낸스 티커(Ticker)</b> 매치 상태를 점검해 보세요.</li>
-                    </ul>
-                </div>
-                
-            </div>
-        </div>
-        """
-        st.markdown(textwrap.dedent(guide_html), unsafe_allow_html=True)
+        guide_html = (
+            '<div style="font-family: Pretendard, sans-serif; line-height: 1.6; color: #333D4B;">'
+            '<p style="font-size: 0.92em; color: #4E5968; margin-bottom: 20px;">'
+            '이 다이어리는 투자 기록 관리(Track 1)와 AI 심리 코칭(Track 2)을 결합하여 '
+            '장기 투자를 끈기 있게 완수할 수 있도록 돕는 스마트 개인 포트폴리오 솔루션입니다.'
+            '</p>'
+            '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px;">'
+            '<!-- Track 1 카드 -->'
+            '<div style="background: #F8F9FA; border-radius: 14px; padding: 18px; border: 1px solid #F2F4F6;">'
+            '<div style="font-weight: 700; font-size: 1.02em; color: #3182F6; margin-bottom: 10px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.25em; margin-right: 8px;">📸</span> Track 1: 투자 자산 기록'
+            '</div>'
+            '<ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #4E5968; line-height: 1.6;">'
+            '<li><b>스크린샷 인식:</b> 매수 잔고 화면(KB증권, 영웅문 등) 캡처 이미지를 일기장 탭에 올리세요.</li>'
+            '<li><b>자동 검증 절차:</b> AI가 인식한 수량·평단가를 보여주며, 기존 보유 주식과의 일치 여부를 정밀 검증 후 저장합니다.</li>'
+            '<li><b>수동 기입 지원:</b> 수동 입력 모드를 통해 일괄/개별 거래 내역도 직접 기입할 수 있습니다.</li>'
+            '</ul>'
+            '</div>'
+            '<!-- Track 2 카드 -->'
+            '<div style="background: #F8F9FA; border-radius: 14px; padding: 18px; border: 1px solid #F2F4F6;">'
+            '<div style="font-weight: 700; font-size: 1.02em; color: #10B981; margin-bottom: 10px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.25em; margin-right: 8px;">💬</span> Track 2: 멘탈 조절 & 피드백'
+            '</div>'
+            '<ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #4E5968; line-height: 1.6;">'
+            '<li><b>심리 태그:</b> 불안하다, 매도 충동, 홀가분하다 등 현재 감정 상태의 태그를 클릭해 활성화해 보세요.</li>'
+            '<li><b>맞춤 멘토 코칭:</b> 사이드바에서 멘토 유형(츤데레, 냉철, 따뜻 등)을 고르면 그에 맞는 맞춤 답변을 실시간으로 제공합니다.</li>'
+            '<li><b>하단 탭바 & 채팅:</b> 모바일 화면에 맞춰 탭바가 하단에 고정되며, 엔터 키 전송을 지원하는 네이티브 채팅창으로 대화합니다.</li>'
+            '</ul>'
+            '</div>'
+            '</div>'
+            '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 12px;">'
+            '<!-- 보물함 카드 -->'
+            '<div style="background: #F8F9FA; border-radius: 14px; padding: 18px; border: 1px solid #F2F4F6;">'
+            '<div style="font-weight: 700; font-size: 1.02em; color: #EAB308; margin-bottom: 10px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.25em; margin-right: 8px;">👑</span> 보물함 (실시간 시세 연동)'
+            '</div>'
+            '<ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #4E5968; line-height: 1.6;">'
+            '<li><b>실시간 평가:</b> Yahoo Finance API와 실시간 연동되어 내 보유 자산의 가치와 수익률을 계산합니다.</li>'
+            '<li><b>경제적 자유 게이지:</b> 목표 배당금 수령에 맞춰 그라데이션 프로그레스 바가 차오릅니다.</li>'
+            '<li><b>가족 분담금 역할극:</b> 배당 기여도에 따라 \'든든한 맏형\', \'야무진 막내\' 등 배당금이 의인화되어 재미를 줍니다.</li>'
+            '</ul>'
+            '</div>'
+            '<!-- 꿀팁 카드 -->'
+            '<div style="background: #EBF5FF; border-radius: 14px; padding: 18px; border: 1px solid #D0E6FF;">'
+            '<div style="font-weight: 700; font-size: 1.02em; color: #1B64DA; margin-bottom: 10px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.25em; margin-right: 8px;">💡</span> 실전 다이어리 200% 활용 팁'
+            '</div>'
+            '<ul style="margin: 0; padding-left: 18px; font-size: 0.88em; color: #1B64DA; line-height: 1.6;">'
+            '<li>매매가 없는 날이라도 가벼운 멘탈 일기나 감정 태그만 기록해 두면 AI가 미래의 흔들리는 내 멘탈을 위한 <b>과거 데이터 처방전</b>을 쓸 수 있습니다.</li>'
+            '<li>실시간 가격 연동을 위해서는 각 종목별 <b>야후파이낸스 티커(Ticker)</b> 매치 상태를 점검해 보세요.</li>'
+            '</ul>'
+            '</div>'
+            '</div>'
+            '</div>'
+        )
+        st.markdown(guide_html, unsafe_allow_html=True)
 
     # 1. 비밀번호 변경
     st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
@@ -155,97 +147,87 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
     )
 
     with st.expander("📖 티커 찾는 방법 — 미장 / 국장 / 한국 ETF 완전 매뉴얼", expanded=False):
-        ticker_manual_html = """
-        <div style="font-family: Pretendard, sans-serif; line-height: 1.6; color: #333D4B;">
-            <h4 style="font-size: 1.15em; font-weight: 700; color: #191F28; margin-top: 0; margin-bottom: 8px;">💡 야후파이낸스 티커(Ticker)란?</h4>
-            <p style="font-size: 0.9em; color: #4E5968; margin-bottom: 20px;">
-                본 앱은 글로벌 금융 시세망인 <b>Yahoo Finance API</b>를 통해 실시간/종가 시세를 가져옵니다. 
-                정확한 가격 표시를 위해 각 자산 유형별 코드(티커) 규칙을 참고하여 등록해 주세요.
-            </p>
-            
-            <!-- 1. 국가/자산별 입력 가이드 -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                
-                <!-- 미장 가이드 -->
-                <div style="background: #F8F9FA; border-radius: 12px; padding: 18px; border: 1px solid #F2F4F6;">
-                    <div style="font-weight: 700; font-size: 1em; color: #191F28; margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="font-size: 1.2em; margin-right: 8px;">🇺🇸</span> 미국 주식 / ETF
-                    </div>
-                    <div style="font-size: 0.88em; color: #4E5968;">
-                        <b style="color: #3182F6;">규칙:</b> 영문 심볼 그대로 입력 (대문자)<br>
-                        <div style="background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E8EB; margin: 8px 0; font-family: monospace; font-size: 0.9em;">
-                            애플 &rarr; <b>AAPL</b><br>
-                            테슬라 &rarr; <b>TSLA</b><br>
-                            S&P 500 ETF &rarr; <b>VOO</b><br>
-                            배당 다우존스 &rarr; <b>SCHD</b>
-                        </div>
-                        <b>🔍 시세 검색 사이트:</b><br>
-                        <a href="https://finance.yahoo.com" target="_blank" style="color: #3182F6; text-decoration: none; font-weight: 600;">Yahoo Finance ↗</a> 에서 종목 검색 후 URL의 <code>/quote/<b>XXXX</b></code> 부분이 티커입니다.
-                    </div>
-                </div>
-                
-                <!-- 국장 가이드 -->
-                <div style="background: #F8F9FA; border-radius: 12px; padding: 18px; border: 1px solid #F2F4F6;">
-                    <div style="font-weight: 700; font-size: 1em; color: #191F28; margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="font-size: 1.2em; margin-right: 8px;">🇰🇷</span> 한국 주식 (코스피/코스닥)
-                    </div>
-                    <div style="font-size: 0.88em; color: #4E5968;">
-                        <b style="color: #3182F6;">규칙:</b> 종목코드 6자리 + 시장구분코드<br>
-                        <span style="font-size: 0.85em; opacity: 0.85;">(코스피: <code>.KS</code> / 코스닥: <code>.KQ</code>)</span>
-                        <div style="background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E8EB; margin: 8px 0; font-family: monospace; font-size: 0.9em;">
-                            삼성전자 (코스피) &rarr; <b>005930.KS</b><br>
-                            SK하이닉스 (코스피) &rarr; <b>000660.KS</b><br>
-                            알테오젠 (코스닥) &rarr; <b>196170.KQ</b>
-                        </div>
-                        <b>🔍 코드 검색 사이트:</b><br>
-                        <a href="https://finance.naver.com" target="_blank" style="color: #3182F6; text-decoration: none; font-weight: 600;">네이버페이 증권 ↗</a> 에서 종목을 검색했을 때 나오는 숫자 6자리 코드입니다.
-                    </div>
-                </div>
-                
-                <!-- 한국 ETF 가이드 -->
-                <div style="background: #F8F9FA; border-radius: 12px; padding: 18px; border: 1px solid #F2F4F6;">
-                    <div style="font-weight: 700; font-size: 1em; color: #191F28; margin-bottom: 12px; display: flex; align-items: center;">
-                        <span style="font-size: 1.2em; margin-right: 8px;">🏦</span> 한국 ETF (KODEX, TIGER 등)
-                    </div>
-                    <div style="font-size: 0.88em; color: #4E5968;">
-                        <b style="color: #3182F6;">규칙:</b> ETF코드 6자리 + <code>.KS</code><br>
-                        <span style="font-size: 0.85em; opacity: 0.85;">(한국 ETF는 99% 코스피 시장 상장)</span>
-                        <div style="background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E8EB; margin: 8px 0; font-family: monospace; font-size: 0.9em;">
-                            KODEX 200 &rarr; <b>069500.KS</b><br>
-                            TIGER 미국S&P500 &rarr; <b>360750.KS</b><br>
-                            ACE 미국배당다우존스 &rarr; <b>402970.KS</b>
-                        </div>
-                        <b>🔍 시세 검색 사이트:</b><br>
-                        <a href="https://finance.naver.com/fund/etfItemList.naver" target="_blank" style="color: #3182F6; text-decoration: none; font-weight: 600;">네이버 ETF 목록 바로가기 ↗</a>
-                    </div>
-                </div>
-                
-            </div>
-            
-            <!-- 2. 대량 등록 및 실전 활용 흐름 -->
-            <div style="background: #EBF5FF; border-radius: 12px; padding: 18px; border: 1px solid #D0E6FF; margin-bottom: 20px;">
-                <div style="font-weight: 700; font-size: 0.95em; color: #1B64DA; margin-bottom: 10px; display: flex; align-items: center;">
-                    <span style="font-size: 1.2em; margin-right: 8px;">🛠️</span> 꿀팁: 엑셀 VLOOKUP으로 한 번에 티커 채우기
-                </div>
-                <ol style="margin: 0; padding-left: 20px; font-size: 0.85em; color: #2B579A; line-height: 1.6;">
-                    <li>한국거래소(<a href="https://data.krx.co.kr" target="_blank" style="color:#1B64DA; font-weight:600;">KRX 정보데이터시스템 ↗</a>) 등에서 전체 ETF 종목코드(6자리) 다운로드</li>
-                    <li>엑셀 수식으로 티커 열을 완성합니다: <code>=종목코드&".KS"</code></li>
-                    <li>설정 메뉴의 <b>CSV 다운로드</b> 버튼으로 내 보유종목 템플릿을 내려받습니다.</li>
-                    <li>엑셀 <code>VLOOKUP</code> 함수를 사용하여 내 종목명에 맞는 티커를 한 번에 자동 매칭합니다.</li>
-                    <li>완성된 CSV 파일을 하단의 <b>'티커 파일 업로드'</b>에 올리면 <b>1초 만에 완료!</b></li>
-                </ol>
-            </div>
-            
-            <!-- 3. 주의사항 -->
-            <div style="background: #FFF9DB; border-radius: 12px; padding: 16px; border: 1px solid #FFE066; font-size: 0.85em; color: #665200; line-height: 1.5; margin-bottom: 8px;">
-                <b>⚠️ 등록 시 유의사항:</b><br>
-                • 티커가 정확하지 않으면 엉뚱한 가격이 표시되거나 가격 불러오기가 지연(📡)될 수 있습니다.<br>
-                • 잘못 설정했을 때 해당 칸을 빈칸으로 두고 저장하면 기본 규칙(자동 연결)으로 자동 리셋됩니다.<br>
-                • 실시간 가격이 연동되지 않을 땐 Yahoo Finance에 입력한 코드를 직접 검색해 보세요.
-            </div>
-        </div>
-        """
-        st.markdown(textwrap.dedent(ticker_manual_html), unsafe_allow_html=True)
+        ticker_manual_html = (
+            '<div style="font-family: Pretendard, sans-serif; line-height: 1.6; color: #333D4B;">'
+            '<h4 style="font-size: 1.15em; font-weight: 700; color: #191F28; margin-top: 0; margin-bottom: 8px;">💡 야후파이낸스 티커(Ticker)란?</h4>'
+            '<p style="font-size: 0.9em; color: #4E5968; margin-bottom: 20px;">'
+            '본 앱은 글로벌 금융 시세망인 <b>Yahoo Finance API</b>를 통해 실시간/종가 시세를 가져옵니다. '
+            '정확한 가격 표시를 위해 각 자산 유형별 코드(티커) 규칙을 참고하여 등록해 주세요.'
+            '</p>'
+            '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px;">'
+            '<!-- 미장 가이드 -->'
+            '<div style="background: #F8F9FA; border-radius: 12px; padding: 18px; border: 1px solid #F2F4F6;">'
+            '<div style="font-weight: 700; font-size: 1em; color: #191F28; margin-bottom: 12px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.2em; margin-right: 8px;">🇺🇸</span> 미국 주식 / ETF'
+            '</div>'
+            '<div style="font-size: 0.88em; color: #4E5968;">'
+            '<b style="color: #3182F6;">규칙:</b> 영문 심볼 그대로 입력 (대문자)<br>'
+            '<div style="background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E8EB; margin: 8px 0; font-family: monospace; font-size: 0.9em;">'
+            '애플 &rarr; <b>AAPL</b><br>'
+            '테슬라 &rarr; <b>TSLA</b><br>'
+            'S&P 500 ETF &rarr; <b>VOO</b><br>'
+            '배당 다우존스 &rarr; <b>SCHD</b>'
+            '</div>'
+            '<b>🔍 시세 검색 사이트:</b><br>'
+            '<a href="https://finance.yahoo.com" target="_blank" style="color: #3182F6; text-decoration: none; font-weight: 600;">Yahoo Finance ↗</a> 에서 종목 검색 후 URL의 <code>/quote/<b>XXXX</b></code> 부분이 티커입니다.'
+            '</div>'
+            '</div>'
+            '<!-- 국장 가이드 -->'
+            '<div style="background: #F8F9FA; border-radius: 12px; padding: 18px; border: 1px solid #F2F4F6;">'
+            '<div style="font-weight: 700; font-size: 1em; color: #191F28; margin-bottom: 12px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.2em; margin-right: 8px;">🇰🇷</span> 한국 주식 (코스피/코스닥)'
+            '</div>'
+            '<div style="font-size: 0.88em; color: #4E5968;">'
+            '<b style="color: #3182F6;">규칙:</b> 종목코드 6자리 + 시장구분코드<br>'
+            '<span style="font-size: 0.85em; opacity: 0.85;">(코스피: <code>.KS</code> / 코스닥: <code>.KQ</code>)</span>'
+            '<div style="background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E8EB; margin: 8px 0; font-family: monospace; font-size: 0.9em;">'
+            '삼성전자 (코스피) &rarr; <b>005930.KS</b><br>'
+            'SK하이닉스 (코스피) &rarr; <b>000660.KS</b><br>'
+            '알테오젠 (코스닥) &rarr; <b>196170.KQ</b>'
+            '</div>'
+            '<b>🔍 코드 검색 사이트:</b><br>'
+            '<a href="https://finance.naver.com" target="_blank" style="color: #3182F6; text-decoration: none; font-weight: 600;">네이버페이 증권 ↗</a> 에서 종목을 검색했을 때 나오는 숫자 6자리 코드입니다.'
+            '</div>'
+            '</div>'
+            '<!-- 한국 ETF 가이드 -->'
+            '<div style="background: #F8F9FA; border-radius: 12px; padding: 18px; border: 1px solid #F2F4F6;">'
+            '<div style="font-weight: 700; font-size: 1em; color: #191F28; margin-bottom: 12px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.2em; margin-right: 8px;">🏦</span> 한국 ETF (KODEX, TIGER 등)'
+            '</div>'
+            '<div style="font-size: 0.88em; color: #4E5968;">'
+            '<b style="color: #3182F6;">규칙:</b> ETF코드 6자리 + <code>.KS</code><br>'
+            '<span style="font-size: 0.85em; opacity: 0.85;">(한국 ETF는 99% 코스피 시장 상장)</span>'
+            '<div style="background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E8EB; margin: 8px 0; font-family: monospace; font-size: 0.9em;">'
+            'KODEX 200 &rarr; <b>069500.KS</b><br>'
+            'TIGER 미국S&P500 &rarr; <b>360750.KS</b><br>'
+            'ACE 미국배당다우존스 &rarr; <b>402970.KS</b>'
+            '</div>'
+            '<b>🔍 시세 검색 사이트:</b><br>'
+            '<a href="https://finance.naver.com/fund/etfItemList.naver" target="_blank" style="color: #3182F6; text-decoration: none; font-weight: 600;">네이버 ETF 목록 바로가기 ↗</a>'
+            '</div>'
+            '</div>'
+            '</div>'
+            '<div style="background: #EBF5FF; border-radius: 12px; padding: 18px; border: 1px solid #D0E6FF; margin-bottom: 20px;">'
+            '<div style="font-weight: 700; font-size: 0.95em; color: #1B64DA; margin-bottom: 10px; display: flex; align-items: center;">'
+            '<span style="font-size: 1.2em; margin-right: 8px;">🛠️</span> 꿀팁: 엑셀 VLOOKUP으로 한 번에 티커 채우기'
+            '</div>'
+            '<ol style="margin: 0; padding-left: 20px; font-size: 0.85em; color: #2B579A; line-height: 1.6;">'
+            '<li>한국거래소(<a href="https://data.krx.co.kr" target="_blank" style="color:#1B64DA; font-weight:600;">KRX 정보데이터시스템 ↗</a>) 등에서 전체 ETF 종목코드(6자리) 다운로드</li>'
+            '<li>엑셀 수식으로 티커 열을 완성합니다: <code>=종목코드&".KS"</code></li>'
+            '<li>설정 메뉴의 <b>CSV 다운로드</b> 버튼으로 내 보유종목 템플릿을 내려받습니다.</li>'
+            '<li>엑셀 <code>VLOOKUP</code> 함수를 사용하여 내 종목명에 맞는 티커를 한 번에 자동 매칭합니다.</li>'
+            '<li>완성된 CSV 파일을 하단의 <b>\'티커 파일 업로드\'</b>에 올리면 <b>1초 만에 완료!</b></li>'
+            '</ol>'
+            '</div>'
+            '<div style="background: #FFF9DB; border-radius: 12px; padding: 16px; border: 1px solid #FFE066; font-size: 0.85em; color: #665200; line-height: 1.5; margin-bottom: 8px;">'
+            '<b>⚠️ 등록 시 유의사항:</b><br>'
+            '• 티커가 정확하지 않으면 엉뚱한 가격이 표시되거나 가격 불러오기가 지연(📡)될 수 있습니다.<br>'
+            '• 잘못 설정했을 때 해당 칸을 빈칸으로 두고 저장하면 기본 규칙(자동 연결)으로 자동 리셋됩니다.<br>'
+            '• 실시간 가격이 연동되지 않을 땐 Yahoo Finance에 입력한 코드를 직접 검색해 보세요.'
+            '</div>'
+            '</div>'
+        )
+        st.markdown(ticker_manual_html, unsafe_allow_html=True)
 
     # ── 티커 편집 테이블 ──────────────────────────────────
     _uid = st.session_state.get("user_id", "")
