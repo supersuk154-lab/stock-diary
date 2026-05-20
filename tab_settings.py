@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import datetime
 import pandas as pd
+import textwrap
 from db import to_kst_str, get_recent_journals, get_real_inventory
 from prices import resolve_ticker
 from ai_helper import ai_resolve_ticker
@@ -78,7 +79,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
             </div>
         </div>
         """
-        st.markdown(guide_html, unsafe_allow_html=True)
+        st.markdown(textwrap.dedent(guide_html), unsafe_allow_html=True)
 
     # 1. 비밀번호 변경
     st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
@@ -244,7 +245,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
             </div>
         </div>
         """
-        st.markdown(ticker_manual_html, unsafe_allow_html=True)
+        st.markdown(textwrap.dedent(ticker_manual_html), unsafe_allow_html=True)
 
     # ── 티커 편집 테이블 ──────────────────────────────────
     _uid = st.session_state.get("user_id", "")
