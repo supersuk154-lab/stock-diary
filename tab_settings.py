@@ -2,7 +2,6 @@ import streamlit as st
 import json
 import datetime
 import pandas as pd
-import textwrap
 from db import to_kst_str, get_recent_journals, get_real_inventory
 from prices import resolve_ticker
 from ai_helper import ai_resolve_ticker
@@ -340,7 +339,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
                     if "종목명" not in _up_df.columns or "야후파이낸스_티커" not in _up_df.columns:
                         banner("CSV 형식 오류: '종목명'과 '야후파이낸스_티커' 컬럼이 필요합니다.", type="error")
                     else:
-                        st.dataframe(_up_df, use_container_width=True, hide_index=True)
+                        st.dataframe(_up_df, width='stretch', hide_index=True)
                         if st.button("이 내용으로 티커 일괄 저장", type="primary", key="csv_upload_save_btn"):
                             saved, skipped, errors = 0, 0, []
                             for _, _row in _up_df.iterrows():
@@ -494,7 +493,7 @@ def render_settings_tab(supabase, ai_client=None, model_name=None, dev_mode=Fals
                     })
                 st.dataframe(
                     pd.DataFrame(log_rows),
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True,
                     column_config={
                         "시각":    st.column_config.TextColumn(width="medium"),

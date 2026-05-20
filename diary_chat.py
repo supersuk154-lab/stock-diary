@@ -196,7 +196,7 @@ def render_chat_section(supabase, ai_client) -> list:
     with col_chat_title:
         st.subheader("💬 AI 멘토와 대화")
     with col_clear:
-        if st.button("🔄 대화 초기화", key="clear_chat_history_btn", use_container_width=True):
+        if st.button("🔄 대화 초기화", key="clear_chat_history_btn", width='stretch'):
             st.session_state["chat_messages"] = []
             st.session_state["chat_opening_needed"] = True
             st.rerun()
