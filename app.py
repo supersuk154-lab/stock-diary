@@ -34,47 +34,72 @@ from supabase import create_client, Client
 
 # ==========================================
 # 2. 앱 기본 설정
-_icon_path = Path(__file__).parent / "assets" / "icon.png"
+# static/ 우선, assets/ 폴백으로 아이콘 탐색
+_icon_path = Path(__file__).parent / "static" / "icon.png"
+_icon_fallback = Path(__file__).parent / "assets" / "icon.png"
+if not _icon_path.exists() and _icon_fallback.exists():
+    _icon_path = _icon_fallback
+
 if _icon_path.exists():
     _pil_icon = Image.open(_icon_path)
     st.set_page_config(page_title="AI 주식 다이어리", page_icon=_pil_icon, layout="centered")
-    # base64 인코딩 → 외부 URL 없이 iOS/Android 홈 화면 아이콘 주입
-    _icon_b64 = base64.b64encode(_icon_path.read_bytes()).decode()
-    _icon_data_url = f"data:image/png;base64,{_icon_b64}"
-    components.html(f"""
-    <script>
-        const head = document.getElementsByTagName('head')[0];
-
-        const metaTitle = document.createElement('meta');
-        metaTitle.name = "apple-mobile-web-app-title";
-        metaTitle.content = "주식일기";
-        head.appendChild(metaTitle);
-
-        const appleIcon = document.createElement('link');
-        appleIcon.rel = "apple-touch-icon";
-        appleIcon.href = "{_icon_data_url}";
-        head.appendChild(appleIcon);
-
-        const androidIcon = document.createElement('link');
-        androidIcon.rel = "icon";
-        androidIcon.type = "image/png";
-        androidIcon.sizes = "192x192";
-        androidIcon.href = "{_icon_data_url}";
-        head.appendChild(androidIcon);
-
-        const metaCap = document.createElement('meta');
-        metaCap.name = "apple-mobile-web-app-capable";
-        metaCap.content = "yes";
-        head.appendChild(metaCap);
-
-        const metaAndroid = document.createElement('meta');
-        metaAndroid.name = "mobile-web-app-capable";
-        metaAndroid.content = "yes";
-        head.appendChild(metaAndroid);
-    </script>
-    """, width=0, height=0)
 else:
     st.set_page_config(page_title="AI 주식 다이어리", page_icon="📈", layout="centered")
+
+# PWA manifest + 메타태그를 메인 페이지(window.parent.document)에 직접 주입.
+# components.html()은 iframe 안에서 실행되므로 window.parent 경유가 필수.
+# Streamlit 자체 manifest("/manifest.json")를 우리 것으로 교체해야 앱 이름·아이콘이 반영됨.
+components.html("""
+<script>
+(function() {
+    function injectPWA(doc) {
+        // Streamlit 기본 manifest 링크 제거 후 우리 것으로 교체
+        var existing = doc.querySelector('link[rel="manifest"]');
+        if (existing) existing.remove();
+        var manifest = doc.createElement('link');
+        manifest.rel = 'manifest';
+        manifest.href = '/app/static/manifest.json';
+        doc.head.appendChild(manifest);
+
+        // iOS 홈 화면 아이콘
+        if (!doc.querySelector('link[rel="apple-touch-icon"]')) {
+            var appleIcon = doc.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = '/app/static/icon.png';
+            doc.head.appendChild(appleIcon);
+        }
+
+        // 앱 이름 (iOS)
+        var metaTitle = doc.querySelector('meta[name="apple-mobile-web-app-title"]');
+        if (!metaTitle) {
+            metaTitle = doc.createElement('meta');
+            metaTitle.name = 'apple-mobile-web-app-title';
+            doc.head.appendChild(metaTitle);
+        }
+        metaTitle.content = '주식일기';
+
+        // standalone 모드 (iOS / Android)
+        ['apple-mobile-web-app-capable', 'mobile-web-app-capable'].forEach(function(name) {
+            var m = doc.querySelector('meta[name="' + name + '"]');
+            if (!m) { m = doc.createElement('meta'); m.name = name; doc.head.appendChild(m); }
+            m.content = 'yes';
+        });
+    }
+
+    try {
+        var targetDoc = (window.parent && window.parent.document !== document)
+            ? window.parent.document : document;
+        if (targetDoc.readyState === 'loading') {
+            targetDoc.addEventListener('DOMContentLoaded', function() { injectPWA(targetDoc); });
+        } else {
+            injectPWA(targetDoc);
+        }
+    } catch(e) {
+        injectPWA(document);
+    }
+})();
+</script>
+""", width=0, height=0)
 
 # ==========================================
 # 🧠 전역 세션 상태 초기화 (탭 진입 전 보장)
