@@ -4,6 +4,7 @@ import base64
 import hashlib
 import secrets as _secrets
 import streamlit as st
+import streamlit.components.v1 as _components
 from pathlib import Path
 
 SESSION_CACHE_PATH = Path(".streamlit") / "session_cache.json"
@@ -56,7 +57,7 @@ def _save_pin_to_cookie(data: dict) -> None:
         encoded = base64.b64encode(
             json.dumps(data, ensure_ascii=False).encode()
         ).decode()
-        st.iframe(srcdoc=_cookie_js(encoded, _COOKIE_MAX_AGE), height=0)
+        _components.html(_cookie_js(encoded, _COOKIE_MAX_AGE), height=0)
     except Exception:
         pass
 
@@ -75,7 +76,7 @@ def _load_pin_from_cookie() -> dict | None:
 def _clear_pin_cookie() -> None:
     """브라우저 쿠키에서 PIN 삭제."""
     try:
-        st.iframe(srcdoc=_cookie_js("", 0), height=0)
+        _components.html(_cookie_js("", 0), height=0)
     except Exception:
         pass
 
