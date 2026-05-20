@@ -152,24 +152,33 @@ def render_fire_countdown(monthly_krw: float):
         progress = 1.0
 
     progress = min(max(progress, 0.0), 1.0)
+    pct_val = int(progress * 100)
     remaining = max(next_goal - monthly_krw, 0)
     achieved = [label for goal, label, _ in milestones if monthly_krw >= goal]
 
-    st.markdown(
-        f'<div style="background:#f8f9fa; border-radius:14px; padding:16px 20px; '
-        f'margin-top:10px; border:1px solid #e9ecef;">'
-        f'<div style="font-size:0.85em; color:#868e96; font-weight:600; margin-bottom:6px;">⏳ FIRE 카운트다운</div>'
-        f'<div style="font-size:1.05em; font-weight:700; color:#339af0; margin-bottom:4px;">{next_label}</div>'
-        f'<div style="font-size:0.83em; color:#666; margin-bottom:8px;">{next_desc}</div>'
-        f'<div style="font-size:0.8em; color:#495057;">'
-        f'예상 월 배당: <b>{monthly_krw:,.0f}원</b>'
-        f'{f" · 목표까지 <b>{remaining:,.0f}원</b>" if remaining > 0 else ""}'
-        f'</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.progress(progress)
+    achieved_html = ""
     if achieved:
-        st.caption("달성 완료: " + "  ".join(achieved))
+        achieved_list = "  ".join(achieved)
+        achieved_html = f'<div style="margin-top:12px; font-size:0.75em; color:#8B95A1; border-top:1px solid #F2F4F6; padding-top:10px;">🏅 달성 완료: <span style="font-weight:600; color:#2B8A3E;">{achieved_list}</span></div>'
+
+    st.markdown(f"""
+    <div style="background:#FFFFFF; border-radius:16px; padding:20px; border:1px solid #F2F4F6; box-shadow: 0 4px 12px rgba(0,0,0,0.03); margin-top:10px;">
+        <div style="font-size:0.82em; color:#8B95A1; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">🚦 경제적 자유 달성도 (FIRE)</div>
+        <div style="font-size:1.15em; font-weight:700; color:#333D4B; margin:8px 0 4px 0;">다음 단계: {next_label}</div>
+        <div style="font-size:0.82em; color:#6B7684; margin-bottom:12px; line-height:1.4;">💡 {next_desc}</div>
+        
+        <!-- 커스텀 그라데이션 프로그레스 바 -->
+        <div style="width:100%; background:#F2F4F6; height:10px; border-radius:5px; overflow:hidden; position:relative; margin-bottom:8px;">
+            <div style="width:{pct_val}%; background:linear-gradient(90deg, #3182F6 0%, #00D4B2 100%); height:100%; border-radius:5px; transition: width 0.8s ease-in-out;"></div>
+        </div>
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8em; font-weight:600; color:#4E5968;">
+            <span>월 배당: <b>{monthly_krw:,.0f}원</b>{f" (목표까지 -{remaining:,.0f}원)" if remaining > 0 else ""}</span>
+            <span style="color:#3182F6;">{pct_val}% 완료</span>
+        </div>
+        {achieved_html}
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_family_contributions(portfolio: list, _supabase, user_id: str):

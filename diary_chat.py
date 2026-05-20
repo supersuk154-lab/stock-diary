@@ -194,12 +194,20 @@ def render_chat_section(supabase, ai_client) -> list:
 
     # ── AI 멘토 대화 ──────────────────────────────────────────
     st.markdown("---")
-    st.subheader("💬 AI 멘토와 대화")
+    
+    col_chat_title, col_clear = st.columns([7, 3])
+    with col_chat_title:
+        st.subheader("💬 AI 멘토와 대화")
+    with col_clear:
+        if st.button("🔄 대화 초기화", key="clear_chat_history_btn", use_container_width=True):
+            st.session_state["chat_messages"] = []
+            st.session_state["chat_opening_needed"] = True
+            st.rerun()
 
     _hint_mentor = st.session_state.get("chosen_mentor", "")
     if _hint_mentor:
         st.markdown(
-            f'<div style="font-size:0.82em; color:#8B95A1; margin-bottom:4px;">'
+            f'<div style="font-size:0.82em; color:#8B95A1; margin-bottom:12px; margin-top:-8px;">'
             f'💬 <b>{_hint_mentor}</b>와 대화 중</div>',
             unsafe_allow_html=True,
         )
@@ -246,29 +254,12 @@ def render_chat_section(supabase, ai_client) -> list:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-    # 채팅 입력 폼
-    with st.form("mind_chat_form", clear_on_submit=True):
-        _mentor_label = st.session_state.get("chosen_mentor", "AI 멘토")
-        user_input = st.text_area(
-            "💭 추가로 하고 싶은 이야기",
-            placeholder=f"{_mentor_label}에게 더 이야기해 보세요...",
-            height=100,
-            key="mind_chat_input",
-        )
-        col_send, col_clear = st.columns([7, 3])
-        with col_send:
-            send_clicked = st.form_submit_button(
-                "보내기", type="primary", width='stretch'
-            )
-        with col_clear:
-            clear_clicked = st.form_submit_button("대화 초기화", width='stretch')
+    # 모바일 최적화된 st.chat_input 적용
+    _mentor_label = st.session_state.get("chosen_mentor", "AI 멘토")
+    user_input = st.chat_input(f"{_mentor_label}에게 더 이야기해 보세요...")
 
-    if clear_clicked:
-        st.session_state["chat_messages"] = []
-        st.session_state["chat_opening_needed"] = True
-        st.rerun()
-
-    if send_clicked and user_input and user_input.strip():
+    if user_input:
+        user_input_stripped = user_input.strip()
         # [보안점검 #7] AI API 호출 속도 제한 (3초 쿨다운)
         last_call = st.session_state.get("last_ai_call", 0.0)
         if time.time() - last_call < 3.0:
@@ -279,7 +270,7 @@ def render_chat_section(supabase, ai_client) -> list:
         st.session_state["last_ai_call"] = time.time()
 
         st.session_state["chat_messages"].append(
-            {"role": "user", "content": user_input.strip()}
+            {"role": "user", "content": user_input_stripped}
         )
 
         with st.spinner("AI 멘토가 답변을 고민 중입니다..."):
@@ -305,7 +296,7 @@ def render_chat_section(supabase, ai_client) -> list:
                 response_text, err = safe_generate(
                     client=ai_client,
                     model_name=MODEL_NAME,
-                    contents=user_input.strip(),
+                    contents=user_input_stripped,
                     config=config,
                     fallback_msg="답변 생성 중 오류가 발생했어요.",
                 )

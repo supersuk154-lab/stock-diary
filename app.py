@@ -399,16 +399,31 @@ toss_style = """
             word-break: keep-all !important;
         }
 
-        /* 본문 패딩 축소 */
+        /* 본문 패딩 축소 및 하단 탭 여백 확보 */
         .block-container {
             padding-left: 1rem !important;
             padding-right: 1rem !important;
+            padding-bottom: 120px !important; /* 하단 고정 탭에 콘텐츠가 가려지는 현상 방지 */
         }
 
-        /* 탭 버튼 텍스트 크기 */
+        /* 탭바 모바일 하단 플로팅 고정 테마 */
+        div[data-testid="stTabs"] {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            background-color: #FFFFFF !important;
+            border-top: 1px solid #E5E8EB !important;
+            z-index: 999999 !important;
+            padding: 10px 16px max(10px, env(safe-area-inset-bottom)) 16px !important;
+            box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05) !important;
+        }
+
+        /* 탭 버튼 터치 영역 및 폰트 크기 조정 */
         div[data-testid="stTabs"] button[data-baseweb="tab"] {
-            font-size: 0.85rem !important;
-            padding: 10px 4px !important;
+            font-size: 0.82rem !important;
+            padding: 8px 4px !important;
+            font-weight: 600 !important;
         }
 
         /* 업로더 텍스트 크기 줄이기 */

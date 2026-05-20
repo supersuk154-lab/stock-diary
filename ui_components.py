@@ -75,17 +75,20 @@ def render_radar_chart(scores: dict):
 
 # pyrefly: ignore [bad-function-definition]
 def card(title: str, content_html: str, icon: str = None):
-    icon_html = f"<span style='font-size: 1.25em; margin-right: 6px;'>{icon}</span>" if icon else ""
+    icon_html = f"<span style='font-size: 1.25em; margin-right: 8px;'>{icon}</span>" if icon else ""
     title_html = f"<div style='font-weight: 700; font-size: 1.05em; color: #191F28; margin-bottom: 10px; display: flex; align-items: center;'>{icon_html}{title}</div>" if title else ""
     card_html = f"""
     <div style="
         background: #FFFFFF;
         border-radius: 16px;
         padding: 20px;
-        border: 1px solid #E5E8EB;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
+        border: 1px solid #F2F4F6;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
         margin-bottom: 16px;
-    ">
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+    " onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.06)';"
+      onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 12px rgba(0, 0, 0, 0.03)';">
         {title_html}
         <div style="color: #4E5968; font-size: 0.95em; line-height: 1.6; font-family: Pretendard;">
             {content_html}
