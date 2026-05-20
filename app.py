@@ -33,79 +33,78 @@ from supabase import create_client, Client
 
 
 def setup_pwa_assets():
-    """Streamlit 내부 static 폴더에 PWA 파일들을 복사하고 index.html을 패치하여 PWA 설치를 완벽 지원합니다."""
+    """PWA 아이콘 생성 및 Streamlit index.html 패치.
+    로컬 개발환경에서는 완전 동작, Streamlit Cloud에서는 아이콘만 생성 시도(실패 시 무시)."""
     import shutil
     import re as _re
     from pathlib import Path
 
+    local_static_dir = Path(__file__).parent / "static"
+    local_static_dir.mkdir(exist_ok=True)
+
+    # ① 아이콘 리사이즈 → 사용자 static/ 에 저장 (git 커밋 대상)
+    icon_src = local_static_dir / "icon.png"
+    if icon_src.exists():
+        try:
+            from PIL import Image as _Image
+            with _Image.open(icon_src) as _img:
+                for _size, _name in [(192, "icon_192.png"), (512, "icon_512.png")]:
+                    _dst = local_static_dir / _name
+                    if not _dst.exists():   # 이미 있으면 스킵
+                        _img.resize((_size, _size), _Image.LANCZOS).save(_dst, "PNG")
+        except Exception:
+            pass
+
+    # ② Streamlit 내부 index.html 패치 (로컬 개발환경 전용)
+    #    Streamlit Cloud에서는 PermissionError 발생 → 조용히 무시
     try:
         st_static_dir = Path(st.__file__).parent / "static"
         if not st_static_dir.exists():
             return
 
-        local_static_dir = Path(__file__).parent / "static"
-        if not local_static_dir.exists():
-            return
-
-        # 1. manifest.json 복사 (Streamlit 기본 manifest 덮어쓰기)
+        # manifest.json 복사
         manifest_src = local_static_dir / "manifest.json"
         if manifest_src.exists():
             shutil.copy2(manifest_src, st_static_dir / "manifest.json")
 
-        # 2. 아이콘 생성: icon.png → icon_192.png / icon_512.png (Pillow로 리사이즈)
-        icon_src = local_static_dir / "icon.png"
-        if icon_src.exists():
-            from PIL import Image as _Image
-            with _Image.open(icon_src) as _img:
-                for _size, _name in [(192, "icon_192.png"), (512, "icon_512.png")]:
-                    _dst = st_static_dir / _name
-                    _resized = _img.resize((_size, _size), _Image.LANCZOS)
-                    _resized.save(_dst, "PNG")
+        # 아이콘 복사
+        for _name in ("icon_192.png", "icon_512.png"):
+            _src = local_static_dir / _name
+            if _src.exists():
+                shutil.copy2(_src, st_static_dir / _name)
 
-        # 3. sw.js (서비스 워커) 생성
-        sw_content = """// sw.js — 최소 서비스 워커 (PWA 설치 요건 충족)
-self.addEventListener('install', function(e) { self.skipWaiting(); });
-self.addEventListener('activate', function(e) { return self.clients.claim(); });
-self.addEventListener('fetch', function(e) {});
-"""
-        with open(st_static_dir / "sw.js", "w", encoding="utf-8") as f:
-            f.write(sw_content)
+        # sw.js 복사
+        sw_src = local_static_dir / "sw.js"
+        if sw_src.exists():
+            shutil.copy2(sw_src, st_static_dir / "sw.js")
 
-        # 4. index.html 패치
+        # index.html 패치
         index_path = st_static_dir / "index.html"
         if not index_path.exists():
             return
+        html_content = index_path.read_text(encoding="utf-8")
 
-        with open(index_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-
-        # 중복 패치 방지
-        if "navigator.serviceWorker.register" not in html_content:
-            # Streamlit 기본 manifest 링크 제거 → 우리 것이 유일하게 적용되도록
+        if "pacemaker_pwa_v4" not in html_content:
             html_content = _re.sub(
                 r'<link[^>]+rel=["\']manifest["\'][^>]*/?>',
                 '',
                 html_content,
                 flags=_re.IGNORECASE,
             )
-
             pwa_patch = """
-  <!-- ▼ PWA 커스텀 설정 (주식메이트) ▼ -->
-  <link rel="manifest" href="/manifest.json?v=3">
-  <link rel="apple-touch-icon" href="/icon_192.png?v=3">
+  <!-- ▼ PWA 주식메이트 v4 (pacemaker_pwa_v4) ▼ -->
+  <link rel="manifest" href="/manifest.json?v=4">
+  <link rel="apple-touch-icon" href="/icon_192.png?v=4">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="주식메이트">
   <script>
-    // ① 서비스 워커 등록
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/sw.js?v=3', { scope: '/' })
-          .catch(function(e) { console.log('SW 등록 실패:', e); });
+        navigator.serviceWorker.register('/sw.js?v=4', { scope: '/' })
+          .catch(function(e) {});
       });
     }
-    // ② PIN 입력창 숫자 키패드 활성화 (삼성 인터넷 포함)
-    //    components.html() iframe이 아닌 메인 문서에서 직접 실행하므로 크로스프레임 차단 없음
     (function() {
       function patchPinInputs() {
         document.querySelectorAll('input[type="password"]').forEach(function(el) {
@@ -123,15 +122,59 @@ self.addEventListener('fetch', function(e) {});
       });
     })();
   </script>
-  <!-- ▲ PWA 커스텀 설정 끝 ▲ -->
+  <!-- ▲ PWA 주식메이트 v4 끝 ▲ -->
 </head>"""
             html_content = html_content.replace("</head>", pwa_patch)
-            with open(index_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
+            index_path.write_text(html_content, encoding="utf-8")
 
-    except Exception as e:
-        import logging
-        logging.warning(f"PWA 자산 자동 설정 실패: {e}")
+    except PermissionError:
+        pass   # Streamlit Cloud 정상 — 조용히 무시
+    except Exception:
+        pass
+
+
+def _inject_pwa_js():
+    """Streamlit Cloud 환경 대응: components.html()로 manifest 링크 동적 주입.
+    Chrome 등 대부분 브라우저에서 동작 (삼성 인터넷은 크로스프레임 제한으로 부분 동작)."""
+    components.html("""
+<script>
+(function() {
+  var MANIFEST = '/app/static/manifest.json?v=4';
+  var ICON     = '/app/static/icon_192.png?v=4';
+
+  function patch(doc) {
+    try {
+      // 기존 manifest 링크 href 교체 또는 새로 삽입
+      var mf = doc.querySelector('link[rel="manifest"]');
+      if (mf) {
+        mf.setAttribute('href', MANIFEST);
+      } else {
+        var l = doc.createElement('link');
+        l.rel = 'manifest'; l.href = MANIFEST;
+        doc.head.appendChild(l);
+      }
+      // apple-touch-icon
+      var al = doc.querySelector('link[rel="apple-touch-icon"]');
+      if (!al) { al = doc.createElement('link'); al.rel = 'apple-touch-icon'; doc.head.appendChild(al); }
+      al.href = ICON;
+      // meta
+      [['apple-mobile-web-app-capable','yes'],
+       ['mobile-web-app-capable','yes'],
+       ['apple-mobile-web-app-title','주식메이트']].forEach(function(m) {
+        var el = doc.querySelector('meta[name="'+m[0]+'"]');
+        if (!el) { el = doc.createElement('meta'); el.name = m[0]; doc.head.appendChild(el); }
+        el.content = m[1];
+      });
+    } catch(e) {}
+  }
+
+  // 부모 문서(메인 Streamlit 페이지)에 적용
+  try { patch(window.parent.document); } catch(e) {}
+  try { patch(window.top.document);    } catch(e) {}
+})();
+</script>
+""", height=0)
+
 
 # PWA 자산 설정 실행
 setup_pwa_assets()
@@ -484,6 +527,9 @@ if not st.session_state.get("supabase_session"):
 
 # [추가] 로그인 완료 후 사용할 Supabase 클라이언트
 supabase = get_supabase()
+
+# PWA manifest JS 주입 (Streamlit Cloud 대응 — index.html 패치 불가 환경 폴백)
+_inject_pwa_js()
 
 # 로그인 직후 Supabase user_metadata에서 멘토 설정 복구
 if "chosen_mentor" not in st.session_state:
