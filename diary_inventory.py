@@ -448,10 +448,13 @@ def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=N
                     )
 
                     with st.expander("⚙️ 내 시급으로 환산하기", expanded=False):
-                        st.caption(
-                            "본인의 실제 시급을 기준으로 환산하면 임팩트가 훨씬 커집니다. "
-                            "영구 저장하려면 `.streamlit/secrets.toml`에 "
-                            "`MY_HOURLY_WAGE = 25000` 같이 추가하세요."
+                        st.markdown(
+                            "본인의 실제 시급을 기준으로 환산하면 동기부여 효과가 더욱 커집니다.\n\n"
+                            "**영구 저장 방법:**\n"
+                            "프로젝트 폴더 내 `.streamlit/secrets.toml` 파일에 아래 설정을 추가하세요.\n"
+                            "```toml\n"
+                            "MY_HOURLY_WAGE = 25000\n"
+                            "```"
                         )
                         new_wage = st.number_input(
                             "이번 세션에서만 적용할 시급(원)",

@@ -225,9 +225,19 @@ def _render_step_verify(supabase):
         st.warning("AI 응답을 해석하지 못했습니다. 다시 업로드하거나 직접 입력해주세요.")
     elif not diff_data:
         st.success("🎉 DB 잔고와 동일합니다. 새로 변동된 내역이 없습니다.")
-        if st.button("매매 없이 감정 일기만 저장하기", key="diary_only_btn"):
-            st.session_state['current_step'] = 'final_analysis'
-            st.rerun()
+        col_diary, col_cancel = st.columns([7, 3])
+        with col_diary:
+            if st.button("📝 매매 없이 감정 일기만 저장하기", key="diary_only_btn", type="primary"):
+                st.session_state['current_step'] = 'final_analysis'
+                st.rerun()
+        with col_cancel:
+            if st.button("취소 및 다시 올리기", key="cancel_only_btn"):
+                st.session_state.pop('temp_extracted_data', None)
+                st.session_state.pop('processed_image', None)
+                st.session_state['uploader_key'] += 1
+                st.session_state['current_step'] = 'upload_mode'
+                st.rerun()
+        return
     else:
         st.info(f"DB 잔고와 비교해 **{len(diff_data)}개 종목**에 변동이 감지됐습니다. 수량을 확인하고 매매 사유를 적어주세요.")
 
@@ -462,12 +472,12 @@ def _render_step_final(supabase, ai_client, selected_tags):
                                 real_price = 0.0
                                 currency   = "KRW"  # ticker도 없으면 한국 주식으로 간주
 
-                            # 가격을 불러오지 못한 경우: 건너뛰지 않고 평단가 0으로 저장
-                            # (보물창고에 종목은 표시되며, 평단가만 0으로 표기)
+                            # 가격을 불러오지 못한 경우: 평단가 왜곡을 방지하기 위해 저장을 건너뜀
                             if real_price <= 0:
                                 if '_skipped_stocks' not in st.session_state:
                                     st.session_state['_skipped_stocks'] = []
                                 st.session_state['_skipped_stocks'].append(trade['_normalized_name'])
+                                continue
 
                             trades_to_insert.append({
                                 "stock_name": trade["_normalized_name"],
@@ -522,8 +532,8 @@ def _render_step_final(supabase, ai_client, selected_tags):
     skipped = st.session_state.pop('_skipped_stocks', [])
     if skipped:
         st.warning(
-            f"⚠️ **{len(skipped)}개 종목**의 현재가를 불러오지 못해 평단가 0으로 기록되었습니다: "
-            f"{', '.join(skipped)}\n\n보물창고에서 종목은 확인할 수 있으며, 평단가는 추후 매매 내역 재업로드 시 갱신됩니다."
+            f"⚠️ **{len(skipped)}개 종목**의 현재가를 불러오지 못해 저장을 건너뛰었습니다: "
+            f"{', '.join(skipped)}\n\n추후 보물함의 수동 배당금/매매 기록 입력을 이용해 주세요."
         )
 
     if 'final_error' in st.session_state:
