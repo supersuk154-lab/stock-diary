@@ -2,31 +2,31 @@
   "name": "AI 주식메이트",
   "short_name": "주식메이트",
   "description": "흔들리지 않는 장기 투자의 시작",
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#F9FAFB",
   "theme_color": "#3182F6",
   "icons": [
     {
-      "src": "/app/static/icon_192.png?v=2",
+      "src": "/icon_192.png?v=3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/app/static/icon_192.png?v=2",
+      "src": "/icon_192.png?v=3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/app/static/icon_512.png?v=2",
+      "src": "/icon_512.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/app/static/icon_512.png?v=2",
+      "src": "/icon_512.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

@@ -32,6 +32,80 @@ from PIL import Image, ImageDraw
 from supabase import create_client, Client
 
 
+def setup_pwa_assets():
+    """Streamlit 내부 static 폴더에 PWA 파일들을 복사하고 index.html을 패치하여 PWA 설치를 완벽 지원합니다."""
+    import shutil
+    from pathlib import Path
+    
+    try:
+        # Streamlit 패키지의 static 폴더 경로 탐색
+        st_static_dir = Path(st.__file__).parent / "static"
+        if not st_static_dir.exists():
+            return
+            
+        local_static_dir = Path(__file__).parent / "static"
+        if not local_static_dir.exists():
+            return
+            
+        # 1. manifest.json 및 아이콘 파일 복사
+        files_to_copy = ["manifest.json", "icon_192.png", "icon_512.png"]
+        for fname in files_to_copy:
+            src = local_static_dir / fname
+            dst = st_static_dir / fname
+            if src.exists():
+                shutil.copy2(src, dst)
+                
+        # 2. sw.js (서비스 워커) 생성
+        sw_content = """// sw.js
+self.addEventListener('install', function(e) {
+  self.skipWaiting();
+});
+self.addEventListener('activate', function(e) {
+  return self.clients.claim();
+});
+self.addEventListener('fetch', function(e) {
+  // PWA 설치 요건을 충족하기 위한 빈 페치 핸들러
+});
+"""
+        with open(st_static_dir / "sw.js", "w", encoding="utf-8") as f:
+            f.write(sw_content)
+            
+        # 3. index.html 패치 (manifest 연결 & 서비스 워커 등록 스크립트 삽입)
+        index_path = st_static_dir / "index.html"
+        if index_path.exists():
+            with open(index_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+                
+            # 중복 인젝션 방지
+            if "navigator.serviceWorker.register" not in html_content:
+                pwa_tags = """
+  <!-- PWA Settings -->
+  <link rel="manifest" href="/manifest.json?v=3">
+  <link rel="apple-touch-icon" href="/icon_192.png?v=3">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="주식메이트">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js?v=3', { scope: '/' })
+          .then(function(reg) { console.log('PWA ServiceWorker registered successfully:', reg.scope); })
+          .catch(function(err) { console.error('PWA ServiceWorker registration failed:', err); });
+      });
+    }
+  </script>
+</head>"""
+                html_content = html_content.replace("</head>", pwa_tags)
+                with open(index_path, "w", encoding="utf-8") as f:
+                    f.write(html_content)
+    except Exception as e:
+        import logging
+        logging.warning(f"PWA 자산 자동 설정 실패: {e}")
+
+# PWA 자산 설정 실행
+setup_pwa_assets()
+
+
 # ==========================================
 # 2. 앱 기본 설정
 # static/ 우선, assets/ 폴백으로 아이콘 탐색
@@ -63,61 +137,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# PWA manifest + 메타태그를 메인 페이지(window.parent.document)에 직접 주입.
-# components.html()은 iframe 안에서 실행되므로 window.parent 경유가 필수.
-# Streamlit 자체 manifest("/manifest.json")를 우리 것으로 교체해야 앱 이름·아이콘이 반영됨.
-components.html("""
-<script>
-(function() {
-    function injectPWA(doc) {
-        // Streamlit 기본 manifest 링크 제거 후 우리 것으로 교체
-        var existing = doc.querySelector('link[rel="manifest"]');
-        if (existing) existing.remove();
-        var manifest = doc.createElement('link');
-        manifest.rel = 'manifest';
-        manifest.href = '/app/static/manifest.json?v=2';
-        doc.head.appendChild(manifest);
-
-        // iOS 홈 화면 아이콘
-        var existingAppleIcon = doc.querySelector('link[rel="apple-touch-icon"]');
-        if (existingAppleIcon) existingAppleIcon.remove();
-        
-        var appleIcon = doc.createElement('link');
-        appleIcon.rel = 'apple-touch-icon';
-        appleIcon.href = '/app/static/icon_192.png?v=2';
-        doc.head.appendChild(appleIcon);
-
-        // 앱 이름 (iOS)
-        var metaTitle = doc.querySelector('meta[name="apple-mobile-web-app-title"]');
-        if (!metaTitle) {
-            metaTitle = doc.createElement('meta');
-            metaTitle.name = 'apple-mobile-web-app-title';
-            doc.head.appendChild(metaTitle);
-        }
-        metaTitle.content = '주식메이트';
-
-        // standalone 모드 (iOS / Android)
-        ['apple-mobile-web-app-capable', 'mobile-web-app-capable'].forEach(function(name) {
-            var m = doc.querySelector('meta[name="' + name + '"]');
-            if (!m) { m = doc.createElement('meta'); m.name = name; doc.head.appendChild(m); }
-            m.content = 'yes';
-        });
-    }
-
-    try {
-        var targetDoc = (window.parent && window.parent.document !== document)
-            ? window.parent.document : document;
-        if (targetDoc.readyState === 'loading') {
-            targetDoc.addEventListener('DOMContentLoaded', function() { injectPWA(targetDoc); });
-        } else {
-            injectPWA(targetDoc);
-        }
-    } catch(e) {
-        injectPWA(document);
-    }
-})();
-</script>
-""", width=0, height=0)
+# PWA 연동은 서버 사이드 index.html 패치를 통해 실행됩니다.
 
 # ==========================================
 # 🧠 전역 세션 상태 초기화 (탭 진입 전 보장)
