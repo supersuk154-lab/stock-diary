@@ -46,6 +46,23 @@ if _icon_path.exists():
 else:
     st.set_page_config(page_title="AI 주식메이트", page_icon="📈", layout="centered")
 
+# Streamlit 기본 메뉴, 푸터, 상단 헤더 숨기기 (Toss 스타일 앱 브랜딩 최적화)
+st.markdown(
+    """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    /* 모바일 브라우저 주소창 스크롤 시 여백 최적화 */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # PWA manifest + 메타태그를 메인 페이지(window.parent.document)에 직접 주입.
 # components.html()은 iframe 안에서 실행되므로 window.parent 경유가 필수.
 # Streamlit 자체 manifest("/manifest.json")를 우리 것으로 교체해야 앱 이름·아이콘이 반영됨.
