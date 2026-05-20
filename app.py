@@ -120,13 +120,15 @@ if _icon_path.exists():
 else:
     st.set_page_config(page_title="AI 주식메이트", page_icon="📈", layout="centered")
 
-# Streamlit 기본 메뉴, 푸터, 상단 헤더 숨기기 (Toss 스타일 앱 브랜딩 최적화)
+# Streamlit 기본 메뉴, 푸터, 상단 헤더 데코레이션 숨기기 (Toss 스타일 앱 브랜딩 최적화, 단 모바일 사이드바 버튼은 유지)
 st.markdown(
     """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    [data-testid="stDecoration"] { display: none !important; }
+    button[data-testid="stHeaderDeploymentButton"] { display: none !important; }
+    header[data-testid="stHeader"] { background-color: transparent !important; }
     /* 모바일 브라우저 주소창 스크롤 시 여백 최적화 */
     .block-container {
         padding-top: 2rem;
@@ -191,14 +193,12 @@ toss_style = """
         color: #191F28; /* 너무 까맣지 않은 부드러운 검정 텍스트 */
     }
 
-    /* 3. 불필요한 기본 UI 숨기기 (진짜 앱처럼) */
+    /* 3. 불필요한 기본 UI 숨기기 (진짜 앱처럼, 단 모바일 사이드바 토글은 유지) */
     #MainMenu {visibility: hidden;} /* 우측 상단 햄버거 메뉴 숨김 */
     footer {visibility: hidden;}    /* 하단 Streamlit 워터마크 숨김 */
-    header[data-testid="stHeader"] {
-        height: 0 !important;
-        min-height: 0 !important;
-        visibility: hidden;
-    }
+    [data-testid="stDecoration"] { display: none !important; }
+    button[data-testid="stHeaderDeploymentButton"] { display: none !important; }
+    header[data-testid="stHeader"] { background-color: transparent !important; }
     
     /* 4. 버튼 디자인 (메인 / 보조 분리 및 터치 영역 확대) */
     button {
