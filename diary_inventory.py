@@ -267,8 +267,18 @@ def get_daily_meal(daily_avg_krw: float) -> dict:
 
 def render_inventory_section(supabase, user_id: str, zen_mode: bool, ai_client=None):
     """나의 보물함 실시간 주가 연동 및 배당 통계 렌더링."""
-    st.markdown("### 📦 나의 보물함 (실시간)")
     
+    col_title, col_refresh = st.columns([3, 1])
+    with col_title:
+        st.markdown("### 📦 나의 보물함 (실시간)")
+    with col_refresh:
+        # Toss 스타일의 가볍고 조그만 새로고침 버튼 배치
+        if st.button("🔄 시세 새로고침", use_container_width=True, key="inventory_refresh_btn"):
+            get_realtime_prices_bulk.clear()
+            get_usd_to_krw.clear()
+            get_real_inventory.clear()
+            st.rerun()
+
     if zen_mode:
         st.info("🌿 **동굴 대피 중**\n\n회원님이 지금까지 땀 흘려 모은 우량 자산들은 계좌에 안전하게 보관되어 있습니다. 오늘은 주가를 잊고 본업에 집중해 보세요!")
     else:
