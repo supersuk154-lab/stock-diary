@@ -194,11 +194,15 @@ def get_market_weather(time_bucket: str = "") -> dict:
     반환: {지수명: {"current": float, "change_pct": float} | None}"""
     tickers = list(_MARKET_INDICES.values())
     result = {name: None for name in _MARKET_INDICES}
-
-    def _calc(close_df):
+    try:
+        # 일봉 2일치: iloc[-2]=전일 종가, iloc[-1]=당일 현재가(장중 업데이트)
+        data = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
+        if data.empty:
+            return result
+        close = data["Close"]
         for name, ticker in _MARKET_INDICES.items():
             try:
-                series = close_df[ticker] if len(tickers) > 1 else close_df
+                series = close[ticker] if len(tickers) > 1 else close
                 series = series.dropna()
                 if len(series) < 2:
                     continue
@@ -209,25 +213,8 @@ def get_market_weather(time_bucket: str = "") -> dict:
                 result[name] = {"current": curr, "change_pct": (curr - prev) / prev * 100}
             except Exception:
                 pass
-
-    try:
-        # 1차: 5분봉 2일치 → 장중 실시간 등락률
-        data = yf.download(tickers, period="2d", interval="5m", auto_adjust=True, progress=False)
-        if not data.empty:
-            _calc(data["Close"])
-            if any(v is not None for v in result.values()):
-                return result
     except Exception:
         pass
-
-    try:
-        # 2차 폴백: 일봉 (주말·휴장일)
-        data = yf.download(tickers, period="2d", auto_adjust=True, progress=False)
-        if not data.empty:
-            _calc(data["Close"])
-    except Exception:
-        pass
-
     return result
 
 
