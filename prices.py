@@ -133,18 +133,24 @@ def get_realtime_prices_bulk(tickers: tuple, time_bucket: str = "") -> dict:
     if not tickers:
         return {}
     try:
-        data = yf.download(list(tickers), period="1d", auto_adjust=True, progress=False)
+        # 주말/휴장일 대응을 위해 period="5d" 사용
+        data = yf.download(list(tickers), period="5d", auto_adjust=True, progress=False)
         prices = {}
         if data.empty:
             return {}
+        
+        is_df = hasattr(data["Close"], "columns")
         for ticker in tickers:
             try:
-                if len(tickers) == 1:
-                    series = data["Close"].dropna()
+                if is_df:
+                    if ticker in data["Close"].columns:
+                        series = data["Close"][ticker].dropna()
+                    else:
+                        series = []
                 else:
-                    series = data["Close"][ticker].dropna()
+                    series = data["Close"].dropna()
                 
-                if not series.empty:
+                if len(series) > 0:
                     val = float(series.iloc[-1])
                     prices[ticker] = None if math.isnan(val) else val
                 else:
@@ -204,7 +210,8 @@ def get_usd_to_krw(time_bucket: str = "") -> float:
     """달러→원 환율 조회 (KRW=X 티커). 실패 시 마지막 성공 환율 또는 1,380원 기본값 반환."""
     _FALLBACK = 1380.0
     try:
-        data = yf.download("KRW=X", period="1d", auto_adjust=True, progress=False)
+        # 주말/휴장일 대응을 위해 period="5d" 사용
+        data = yf.download("KRW=X", period="5d", auto_adjust=True, progress=False)
         if data.empty:
             # [수정 #12] 마지막 성공 환율 캐시 사용
             return st.session_state.get("_last_usd_krw", _FALLBACK)
