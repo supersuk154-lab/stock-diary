@@ -169,9 +169,29 @@ def get_realtime_prices_bulk(tickers: tuple, time_bucket: str = "") -> dict:
     try:
         # 2차 폴백: 일봉 (주말·휴장일 종가 보장)
         data = yf.download(list(tickers), period="5d", auto_adjust=True, progress=False)
-        return _parse(data)
+        prices.update({k: v for k, v in _parse(data).items() if v is not None})
     except Exception:
-        return {}
+        pass
+
+    try:
+        # 3차 폴백: pykrx (야후 파이낸스에 없는 국내 신규 ETF/종목, 예: 468200.KS)
+        missing_kr = [t for t, p in prices.items() if p is None and (t.endswith(".KS") or t.endswith(".KQ"))]
+        if missing_kr:
+            from pykrx import stock as krx
+            today = datetime.datetime.now(KST).strftime("%Y%m%d")
+            start_date = (datetime.datetime.now(KST) - datetime.timedelta(days=7)).strftime("%Y%m%d")
+            for t in missing_kr:
+                krx_ticker = t.split('.')[0]
+                try:
+                    df = krx.get_market_ohlcv(start_date, today, krx_ticker)
+                    if not df.empty:
+                        prices[t] = float(df['종가'].iloc[-1])
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return prices
 
 
 def get_realtime_price(ticker):
